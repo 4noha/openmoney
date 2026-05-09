@@ -1,0 +1,6 @@
+{
+  "FCM_PROJECT_ID": "mfw2-4noha-6f9d3",
+  "FCM_SERVICE_ACCOUNT_PATH": "firebase-service-account.json",
+  "DAEMON_PORT": 8765,
+  "DAEMON_INTERVAL_HOURS": 336
+}

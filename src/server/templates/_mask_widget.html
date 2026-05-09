@@ -1,0 +1,548 @@
+<!-- 金額マスク (😎/🙈) + 海苔モード (■) + UI ロック (🔒) を全ページ右上に固定表示 -->
+<style>
+  /* ui.html / settings.html などが `select, button { font-size:13px; padding:5px 10px; }` の
+     ような全体スタイルを当てているので !important で確実に上書きする。 */
+  .mf2-fixed-btn {
+    /* ui.html ヘッダ高さ ~49px (padding 12+12 + mode-btn 25)、中央 ~24.5px。
+       button height 30px → top: (49-30)/2 ≒ 10px でちょうど中央。 */
+    position: fixed !important; top: 10px !important; z-index: 9999 !important;
+    width: 30px !important; height: 30px !important;
+    box-sizing: border-box !important;
+    padding: 0 !important; margin: 0 !important;
+    border-radius: 50% !important; border: 1px solid #ccc !important;
+    background: #fff !important;
+    display: inline-flex !important; align-items: center !important; justify-content: center !important;
+    font-size: 16px !important; line-height: 1 !important;
+    cursor: pointer !important;
+  }
+  .mf2-fixed-btn:hover { background: #f5f5f5 !important; }
+  /* 金額マスク中はマスクされた cell をクリック可能にして「peek」できるように */
+  body.mf2-mask-on [data-mf-masked] { cursor: pointer; }
+  body.mf2-mask-on [data-mf-revealed="1"] {
+    background: #fff3e0; outline: 1px solid #ffb74d; border-radius: 3px;
+    cursor: pointer;
+  }
+  #mf2-nori-btn { right: 80px !important; }
+  #mf2-mask-btn { right: 44px !important; }
+  #mf2-lock-btn { right: 8px !important; }
+  /* 海苔モード ON 時は 🍙 ボタンに枠を強調 */
+  #mf2-nori-btn.active { background: #fff3e0 !important; border-color: #d84315 !important; box-shadow: 0 0 0 2px rgba(216,67,21,.25) !important; }
+  /* 各ページの上部 header/nav のリンクと固定ボタンが重ならないよう右側に予約 (3 ボタン分) */
+  body > header, body > nav { padding-right: 124px !important; }
+
+  /* 海苔モードの黒塗り表示 (クリック可能)。
+     親バッジの背景色・絵文字 (color:#000 で消えない) も完全に隠すため
+     ::after の絶対配置で黒い矩形を被せる。元テキストはそのまま残し
+     (color:transparent で見えなく) 文字幅 / レイアウトを保つ。 */
+  .nori-redacted {
+    position: relative;
+    background: #000; color: transparent !important;
+    padding: 0 2px; border-radius: 2px;
+    user-select: none;
+    cursor: pointer;
+    text-shadow: none !important;
+  }
+  .nori-redacted::after {
+    content: ''; position: absolute; inset: 0;
+    background: #000; border-radius: inherit;
+    pointer-events: none;
+  }
+  .nori-redacted:hover::after { background: #333; }
+  .nori-redacted:hover { box-shadow: 0 0 0 1px #d84315; }
+  /* タグバッジ自身が nori-redacted (タグ単位黒塗り) になる場合、
+     バッジ枠 (border / 背景色) は黒で塗り潰す。 */
+  .nori-redacted[data-nori-tag] {
+    border: none !important; box-shadow: none !important;
+    margin: 0 1px;
+  }
+  /* 選択時に出るミニポップアップ (追加用) */
+  .mf2-nori-popup {
+    position: absolute; z-index: 10000;
+    background: #222; color: #fff;
+    border-radius: 4px; padding: 4px 6px;
+    font-size: 12px; line-height: 1;
+    box-shadow: 0 2px 8px rgba(0,0,0,.3);
+    cursor: pointer; user-select: none;
+  }
+  .mf2-nori-popup:hover { background: #000; }
+  /* 海苔解除メニュー (右上、3 ボタンの下) */
+  .mf2-nori-unmenu {
+    position: fixed; top: 48px; right: 8px; z-index: 9999;
+    background: #fff; border: 1px solid #d84315;
+    border-radius: 6px; padding: 8px 10px;
+    box-shadow: 0 4px 12px rgba(0,0,0,.18);
+    font-size: 12px; max-width: 320px;
+    user-select: none;
+  }
+  .mf2-nori-unmenu .label { color: #555; font-size: 11px; margin-bottom: 4px; }
+  .mf2-nori-unmenu .term { font-weight: 600; color: #222; padding: 4px 0; word-break: break-all; }
+  .mf2-nori-unmenu button {
+    margin-top: 6px; padding: 4px 10px;
+    background: #d84315; color: #fff; border: none; border-radius: 4px;
+    font-size: 12px; cursor: pointer;
+  }
+  .mf2-nori-unmenu button:hover { background: #bf360c; }
+  .mf2-nori-unmenu .close {
+    background: none !important; color: #888 !important;
+    margin-left: 6px; padding: 4px 8px !important;
+    border: 1px solid #ccc !important;
+  }
+</style>
+<button id="mf2-nori-btn" class="mf2-fixed-btn" title="海苔モード (黒塗り、クリックで切替)" onclick="mf2NoriToggle()">🍙</button>
+<button id="mf2-mask-btn" class="mf2-fixed-btn" title="金額マスク (クリックで切替)" onclick="mf2ToggleMask()">😎</button>
+<button id="mf2-lock-btn" class="mf2-fixed-btn" title="UI ロック (scrape は継続)" onclick="mf2LockSession()">🔒</button>
+<script>
+(() => {
+  const KEY = 'mf2_mask_amounts';
+  // 全ページで共通のマスク対象セレクタ (page-specific 上書きは window.MF2_MASK_SELECTOR で)
+  // raw.html は data-col のカラム名を見て金額系のみ対象にするため自前で上書きする。
+  const DEFAULT_SEL = 'td.amount, div.amount, .amz-detail';
+  const sel = () => window.MF2_MASK_SELECTOR || DEFAULT_SEL;
+  const isOn = () => localStorage.getItem(KEY) === '1';
+  const maskText = (s) => (s || '').replace(/\d/g, '8');
+
+  function _maskCellInPlace(el) {
+    const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+    let n, dirty = false;
+    while ((n = walker.nextNode())) {
+      if (n._mfOrig === undefined) n._mfOrig = n.nodeValue;
+      if (n.nodeValue !== maskText(n._mfOrig)) n.nodeValue = maskText(n._mfOrig);
+      dirty = true;
+    }
+    if (dirty) el.dataset.mfMasked = '1';
+  }
+  function _unmaskCellInPlace(el) {
+    const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+    let n;
+    while ((n = walker.nextNode())) {
+      if (n._mfOrig !== undefined) n.nodeValue = n._mfOrig;
+    }
+    delete el.dataset.mfMasked;
+  }
+  function applyMask(root) {
+    root.querySelectorAll(sel()).forEach(el => {
+      // peek 中 (ユーザがクリックして一時的に開示している cell) は再マスクしない
+      if (el.dataset.mfRevealed === '1') return;
+      _maskCellInPlace(el);
+    });
+  }
+  function unmask(root) {
+    root.querySelectorAll('[data-mf-masked], [data-mf-revealed]').forEach(el => {
+      _unmaskCellInPlace(el);
+      delete el.dataset.mfRevealed;
+    });
+  }
+  // マスク中、 cell クリックで peek (再クリックで再マスク)
+  function _toggleCellReveal(el) {
+    if (el.dataset.mfRevealed === '1') {
+      delete el.dataset.mfRevealed;
+      _maskCellInPlace(el);
+    } else {
+      _unmaskCellInPlace(el);
+      el.dataset.mfRevealed = '1';
+    }
+  }
+  function _findMaskCell(target) {
+    let el = target;
+    while (el && el !== document.body) {
+      if (el.matches && el.matches(sel())) return el;
+      el = el.parentElement;
+    }
+    return null;
+  }
+  function syncBtn() {
+    const b = document.getElementById('mf2-mask-btn');
+    if (b) b.textContent = isOn() ? '🙈' : '😎';
+    document.body.classList.toggle('mf2-mask-on', isOn());
+  }
+  window.mf2ToggleMask = () => {
+    const next = isOn() ? '0' : '1';
+    localStorage.setItem(KEY, next);
+    if (next === '1') applyMask(document); else unmask(document);
+    syncBtn();
+  };
+  function init() {
+    syncBtn();
+    if (isOn()) applyMask(document);
+    // 動的描画 (renderTxs / loadPage) 後にも追従するため MutationObserver で再適用
+    new MutationObserver(muts => {
+      if (!isOn()) return;
+      for (const m of muts) {
+        m.addedNodes.forEach(n => { if (n.nodeType === 1) applyMask(n); });
+      }
+    }).observe(document.body, { childList: true, subtree: true });
+    // マスク中の cell クリックで peek (再クリックで再マスク)。
+    // 解除メニューや nori-redacted との衝突を避けるためマスク中だけ反応。
+    document.addEventListener('click', (e) => {
+      if (!isOn()) return;
+      // 黒塗り span を踏んだクリックは nori 側に任せる
+      if (e.target && e.target.classList && e.target.classList.contains('nori-redacted')) return;
+      const cell = _findMaskCell(e.target);
+      if (!cell) return;
+      _toggleCellReveal(cell);
+    });
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
+  else init();
+
+  // UI ロック: /api/security/lock → /login?next=<元のURL>。解錠後にもとの絞り込みに戻る。
+  window.mf2LockSession = async () => {
+    const r = await fetch('/api/security/lock', { method: 'POST' });
+    if (!r.ok) {
+      const detail = await r.json().catch(() => ({}));
+      alert('ロック失敗: ' + (detail.detail || r.status));
+      return;
+    }
+    const back = location.pathname + location.search + location.hash;
+    location.href = '/login?next=' + encodeURIComponent(back);
+  };
+
+  // ─── 海苔モード (黒塗り) ───
+  // 対象セル: 明細の内容欄 (td.desc) / 確定申告の社名欄 (td.company) /
+  //          タグ欄 (td.tag-cell) / 銀行・サービス名 (td.bank) /
+  //          確定申告のインボイス番号 (td.invoice-num) / Amazon詳細 (.amz-detail) /
+  //          タグフィルタバーのボタン (.tag-btn) /
+  //          生データテーブルの非金額カラム (table.raw td[data-col] のうち
+  //          amount/debit/credit/balance/price/total/subtotal/shipping/discount/
+  //          qty/fee/points/gift を含まないもの)
+  // ページ別に上書きしたい場合は window.MF2_NORI_SELECTOR で。
+  // .tag-btn は <button> なので、redacted span をクリックすると元の onclick (setTag)
+  // ではなく解除メニューが先に発火する → 解除してから普通に押し直せる UX。
+  const NORI_LIST_KEY = 'mf2_nori_list';
+  const NORI_TAGS_KEY = 'mf2_nori_tags';   // タグ ID 単位の黒塗りリスト
+  const NORI_ON_KEY = 'mf2_nori_on';
+  const _RAW_NORI_SEL = (
+    "table.raw td[data-col]" +
+    ":not([data-col$='amount']):not([data-col$='debit']):not([data-col$='credit'])" +
+    ":not([data-col$='balance']):not([data-col$='price']):not([data-col$='total'])" +
+    ":not([data-col$='subtotal']):not([data-col$='shipping']):not([data-col$='discount'])" +
+    ":not([data-col$='qty']):not([data-col$='quantity'])" +
+    ":not([data-col*='fee']):not([data-col*='points']):not([data-col*='gift'])"
+  );
+  // .amz-detail は MASK 側 (digit → 8) と重複適用するとマスク後のテキストに対して
+  // term 一致しないことがあるため nori からは除外する (中身は基本金額系で
+  // 商品名は含まない)。
+  const NORI_DEFAULT_SEL = (
+    'td.desc, td.company, td.tag-cell, td.bank, td.invoice-num, .tag-btn, '
+    + _RAW_NORI_SEL
+  );
+  const noriSel = () => window.MF2_NORI_SELECTOR || NORI_DEFAULT_SEL;
+  const noriOn = () => localStorage.getItem(NORI_ON_KEY) === '1';
+  const noriList = () => {
+    try { return JSON.parse(localStorage.getItem(NORI_LIST_KEY) || '[]'); }
+    catch (_) { return []; }
+  };
+  const setNoriList = (l) => localStorage.setItem(NORI_LIST_KEY, JSON.stringify(l));
+  const noriTags = () => {
+    try { return JSON.parse(localStorage.getItem(NORI_TAGS_KEY) || '[]'); }
+    catch (_) { return []; }
+  };
+  const setNoriTags = (l) => localStorage.setItem(NORI_TAGS_KEY, JSON.stringify(l));
+
+  function noriRedactCell(cell, terms) {
+    if (cell.dataset.noriApplied === '1') return;
+    if (!terms.length) return;
+    const textNodes = [];
+    const walker = document.createTreeWalker(cell, NodeFilter.SHOW_TEXT, {
+      acceptNode: (n) => n.parentElement && n.parentElement.classList.contains('nori-redacted')
+        ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT
+    });
+    let n;
+    while ((n = walker.nextNode())) textNodes.push(n);
+    for (const tnode of textNodes) {
+      let remaining = tnode.nodeValue || '';
+      const frags = [];
+      let didReplace = false;
+      while (remaining.length > 0) {
+        let bestIdx = -1, bestTerm = null;
+        for (const term of terms) {
+          if (!term) continue;
+          const i = remaining.indexOf(term);
+          if (i >= 0 && (bestIdx < 0 || i < bestIdx)) { bestIdx = i; bestTerm = term; }
+        }
+        if (bestIdx < 0) {
+          if (remaining) frags.push(document.createTextNode(remaining));
+          break;
+        }
+        didReplace = true;
+        if (bestIdx > 0) frags.push(document.createTextNode(remaining.slice(0, bestIdx)));
+        const span = document.createElement('span');
+        span.className = 'nori-redacted';
+        // 元のテキストをそのまま入れて CSS の color:#000 / background:#000 で
+        // 視覚的にだけ隠す。これにより日本語・英数字どちらでも幅が保たれる。
+        // (画面共有目的なので copy-paste / インスペクタで露出することは許容)
+        span.textContent = bestTerm;
+        span.dataset.noriOrig = bestTerm;
+        frags.push(span);
+        remaining = remaining.slice(bestIdx + bestTerm.length);
+      }
+      if (didReplace) {
+        const parent = tnode.parentNode;
+        for (const f of frags) parent.insertBefore(f, tnode);
+        parent.removeChild(tnode);
+      }
+    }
+    cell.dataset.noriApplied = '1';
+  }
+
+  function applyNori(root) {
+    // 1) 文字列ベースの黒塗り (td.desc 等)
+    const terms = noriList();
+    if (terms.length) {
+      root.querySelectorAll(noriSel()).forEach(cell => noriRedactCell(cell, terms));
+    }
+    // 2) タグ単位の黒塗り
+    applyNoriTags(root);
+  }
+
+  // タグ単位: 該当タグ ID の (a) tag-bar ボタン (b) tag-cell バッジ (c) その
+  // タグを持つ tr の desc cell の中身を全て黒塗りでラップする。
+  function applyNoriTags(root) {
+    const tags = noriTags();
+    if (!tags.length) return;
+    for (const tag of tags) {
+      // (a) タグフィルタバーのボタン (data-tag="<tag>")
+      root.querySelectorAll(`.tag-btn[data-tag="${cssEsc(tag)}"]`).forEach(btn => {
+        if (btn.dataset.noriTagApplied === '1') return;
+        wrapElContentAsTag(btn, tag);
+      });
+      // (b) tag-cell の中の各バッジ (data-tag="<tag>")
+      root.querySelectorAll(`td.tag-cell [data-tag="${cssEsc(tag)}"]`).forEach(badge => {
+        if (badge.dataset.noriTagApplied === '1') return;
+        wrapElContentAsTag(badge, tag);
+      });
+      // (c) data-tags="|tag1|tag2|" を含む tr の desc cell
+      root.querySelectorAll(`tr[data-tags*="|${cssEsc(tag)}|"] td.desc`).forEach(cell => {
+        if (cell.dataset.noriTagApplied === '1') return;
+        wrapElContentAsTag(cell, tag);
+      });
+    }
+  }
+
+  // 要素の中身全部を 1 個の nori-redacted span で包む (タグ単位用)。
+  // 既存子ノードを span 内に移動し、span に data-nori-tag を付与。
+  function wrapElContentAsTag(el, tag) {
+    const span = document.createElement('span');
+    span.className = 'nori-redacted';
+    span.dataset.noriTag = tag;
+    while (el.firstChild) span.appendChild(el.firstChild);
+    el.appendChild(span);
+    el.dataset.noriTagApplied = '1';
+  }
+  // CSS attribute selector 用の escape (data-tag に "store:Amazon" 等 : 含む)
+  function cssEsc(s) {
+    if (window.CSS && window.CSS.escape) return CSS.escape(s);
+    return (s || '').replace(/[^a-zA-Z0-9_-]/g, c => '\\' + c);
+  }
+
+  function unapplyNori(root) {
+    // 文字列ベース: 1 つの text node に展開
+    root.querySelectorAll('.nori-redacted').forEach(span => {
+      // タグ単位の wrap も unwrap (子ノードを span の前に move)
+      if (span.dataset.noriTag) {
+        const parent = span.parentNode;
+        while (span.firstChild) parent.insertBefore(span.firstChild, span);
+        span.remove();
+      } else {
+        const orig = span.dataset.noriOrig;
+        if (orig != null) span.replaceWith(document.createTextNode(orig));
+      }
+    });
+    root.querySelectorAll('[data-nori-applied]').forEach(el => delete el.dataset.noriApplied);
+    root.querySelectorAll('[data-nori-tag-applied]').forEach(el => delete el.dataset.noriTagApplied);
+  }
+  function syncNoriBtn() {
+    const b = document.getElementById('mf2-nori-btn');
+    if (b) b.classList.toggle('active', noriOn());
+  }
+
+  window.mf2NoriToggle = () => {
+    const next = noriOn() ? '0' : '1';
+    localStorage.setItem(NORI_ON_KEY, next);
+    if (next === '1') applyNori(document); else unapplyNori(document);
+    syncNoriBtn();
+  };
+
+  // 選択中テキストにポップアップを出す (内容欄 / 社名欄 のみ)
+  function _ancestorMatches(node, selector) {
+    let el = node.nodeType === 1 ? node : node.parentElement;
+    while (el) {
+      if (el.matches && el.matches(selector)) return el;
+      el = el.parentElement;
+    }
+    return null;
+  }
+  function hideNoriPopup() {
+    const p = document.getElementById('mf2-nori-popup');
+    if (p) p.remove();
+  }
+  function showNoriPopup(x, y, text, tagId) {
+    hideNoriPopup();
+    const p = document.createElement('div');
+    p.id = 'mf2-nori-popup';
+    p.className = 'mf2-nori-popup';
+    if (tagId) {
+      // タグ内選択 → タグ単位黒塗り
+      p.textContent = `🍙 タグ「${text}」ごと黒塗り`;
+      p.dataset.noriTag = tagId;
+    } else {
+      p.textContent = '🍙 黒塗りに追加';
+      p.dataset.noriText = text;
+    }
+    p.addEventListener('mousedown', (e) => {
+      e.preventDefault();   // 選択を消さない
+      e.stopPropagation();
+    });
+    p.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      if (p.dataset.noriTag) {
+        const tagId = p.dataset.noriTag;
+        const list = noriTags();
+        if (!list.includes(tagId)) {
+          list.push(tagId);
+          setNoriTags(list);
+        }
+      } else {
+        const t = p.dataset.noriText;
+        const list = noriList();
+        if (t && !list.includes(t)) {
+          list.push(t);
+          setNoriList(list);
+        }
+      }
+      // 海苔 OFF だった場合は自動で ON にする
+      if (!noriOn()) {
+        localStorage.setItem(NORI_ON_KEY, '1');
+        syncNoriBtn();
+      } else {
+        // ON だった場合は新しい entry を反映するため一旦巻き戻して再適用
+        unapplyNori(document);
+      }
+      applyNori(document);
+      window.getSelection().removeAllRanges();
+      hideNoriPopup();
+    });
+    p.style.left = x + 'px';
+    p.style.top = (y + 8) + 'px';
+    document.body.appendChild(p);
+  }
+
+  function noriOnSelectionChange() {
+    const sel = window.getSelection();
+    if (!sel || sel.isCollapsed) { hideNoriPopup(); return; }
+    const text = sel.toString().trim();
+    if (!text || text.length < 1) { hideNoriPopup(); return; }
+    const range = sel.getRangeAt(0);
+    const cell = _ancestorMatches(range.commonAncestorContainer, noriSel());
+    if (!cell) { hideNoriPopup(); return; }
+    // タグ内選択 (.tag-btn[data-tag] or [data-tag] in tag-cell) ならタグ単位
+    const tagEl = _ancestorMatches(range.commonAncestorContainer, '.tag-btn[data-tag], td.tag-cell [data-tag]');
+    const tagId = tagEl ? tagEl.dataset.tag : null;
+    const rect = range.getBoundingClientRect();
+    const x = window.scrollX + rect.right;
+    const y = window.scrollY + rect.bottom;
+    showNoriPopup(x, y, text, tagId);
+  }
+
+  // ─── 解除メニュー (右上) ───
+  // 黒塗り span をクリックすると、画面右上 (3 ボタンの直下) に解除メニューを
+  // 出して、その term を nori_list から削除できるようにする。
+  function hideUnmenu() {
+    const m = document.getElementById('mf2-nori-unmenu');
+    if (m) m.remove();
+  }
+  function showUnmenu(opts) {
+    // opts = { term?: string, tag?: string }
+    hideUnmenu();
+    if (!opts || (!opts.term && !opts.tag)) return;
+    const isTag = !!opts.tag;
+    const m = document.createElement('div');
+    m.id = 'mf2-nori-unmenu';
+    m.className = 'mf2-nori-unmenu';
+    m.innerHTML = `
+      <div class="label">🍙 ${isTag ? `タグ単位の黒塗りを解除しますか?` : '黒塗り対象を解除しますか?'}</div>
+      <div class="term"></div>
+      <div>
+        <button class="release">🍙 解除</button>
+        <button class="close">閉じる</button>
+      </div>`;
+    m.querySelector('.term').textContent = isTag ? `タグ ID: ${opts.tag}` : opts.term;
+    m.querySelector('.release').addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (isTag) {
+        const list = noriTags().filter(t => t !== opts.tag);
+        setNoriTags(list);
+      } else {
+        const list = noriList().filter(t => t !== opts.term);
+        setNoriList(list);
+      }
+      // 全 .nori-redacted を一旦解除して再適用
+      unapplyNori(document);
+      applyNori(document);
+      hideUnmenu();
+    });
+    m.querySelector('.close').addEventListener('click', (e) => {
+      e.stopPropagation();
+      hideUnmenu();
+    });
+    m.addEventListener('mousedown', (e) => e.stopPropagation());
+    document.body.appendChild(m);
+  }
+
+  function initNori() {
+    syncNoriBtn();
+    if (noriOn()) applyNori(document);
+    document.addEventListener('mouseup', () => setTimeout(noriOnSelectionChange, 0));
+    document.addEventListener('keyup', () => setTimeout(noriOnSelectionChange, 0));
+    document.addEventListener('mousedown', (e) => {
+      // 黒塗り span クリックは別処理
+      if (e.target && e.target.classList && e.target.classList.contains('nori-redacted')) return;
+      const p = document.getElementById('mf2-nori-popup');
+      if (p && p.contains(e.target)) return;
+      const m = document.getElementById('mf2-nori-unmenu');
+      if (m && m.contains(e.target)) return;
+      hideNoriPopup();
+      hideUnmenu();
+    });
+    // 黒塗り span クリック → 解除メニュー
+    // capture: true で親 (例: <button class="tag-btn"> の onclick=setTag(...))
+    // より先に拾い、stopPropagation で本来のボタン処理をキャンセルする。
+    document.addEventListener('click', (e) => {
+      // 親方向に nori-redacted を探す (::after オーバーレイ or 子ノードクリック対策)
+      let el = e.target;
+      while (el && el !== document.body && !(el.classList && el.classList.contains('nori-redacted'))) {
+        el = el.parentElement;
+      }
+      if (el && el.classList && el.classList.contains('nori-redacted')) {
+        e.preventDefault();
+        e.stopPropagation();
+        if (el.dataset.noriTag) {
+          showUnmenu({ tag: el.dataset.noriTag });
+        } else {
+          showUnmenu({ term: el.dataset.noriOrig || '' });
+        }
+      }
+    }, true);
+    // mousedown 側も先回りして親ボタンの :active や setTag 系を防ぐ
+    document.addEventListener('mousedown', (e) => {
+      let el = e.target;
+      while (el && el !== document.body && !(el.classList && el.classList.contains('nori-redacted'))) {
+        el = el.parentElement;
+      }
+      if (el && el.classList && el.classList.contains('nori-redacted')) {
+        e.preventDefault();
+        e.stopPropagation();
+      }
+    }, true);
+    new MutationObserver(muts => {
+      if (!noriOn()) return;
+      for (const m of muts) {
+        m.addedNodes.forEach(n => { if (n.nodeType === 1) applyNori(n); });
+      }
+    }).observe(document.body, { childList: true, subtree: true });
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', initNori);
+  else initNori();
+})();
+</script>

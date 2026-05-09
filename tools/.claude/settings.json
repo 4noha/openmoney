@@ -1,0 +1,17 @@
+{
+  "env": {
+    "SETUP_API_BASE_URL": "http://localhost:8765",
+    "DISABLE_AUTOUPDATER": "1"
+  },
+  "permissions": {
+    "allow": [
+      "Bash(*)",
+      "Read(*)",
+      "Edit(*)",
+      "Write(*)"
+    ],
+    "deny": []
+  },
+  "skipDangerousModePermissionPrompt": true,
+  "theme": "dark"
+}

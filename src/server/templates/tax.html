@@ -1,0 +1,816 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>インボイス管理 · OpenMoney</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: -apple-system, sans-serif; font-size: 13px; background: #f5f5f5; }
+body > header { background: #1a237e; color: #fff; padding: 10px 16px; display: flex; align-items: center; gap: 16px; position: sticky; top: 0; z-index: 100; }
+table thead th { position: sticky; top: 0; background: #fafafa; z-index: 5; }
+body > header a { color: #aac4ff; text-decoration: none; font-size: 12px; }
+h1 { font-size: 16px; font-weight: 600; }
+.main { padding: 16px; max-width: 1200px; margin: 0 auto; }
+.toolbar { display: flex; gap: 8px; align-items: center; margin-bottom: 16px; flex-wrap: wrap; }
+select, input[type=text], input[type=number], input[type=date] {
+  border: 1px solid #ccc; border-radius: 4px; padding: 5px 8px; font-size: 13px;
+}
+button { border: none; border-radius: 4px; padding: 6px 12px; font-size: 13px; cursor: pointer; }
+.btn-primary { background: #1a237e; color: #fff; }
+.btn-secondary { background: #e0e0e0; color: #333; }
+.btn-danger { background: #c62828; color: #fff; }
+.btn-sm { padding: 3px 8px; font-size: 11px; }
+.card { background: #fff; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,.1); margin-bottom: 16px; overflow: hidden; }
+.card-header { padding: 10px 16px; background: #e8eaf6; font-weight: 600; display: flex; justify-content: space-between; align-items: center; }
+table { width: 100%; border-collapse: collapse; }
+th { background: #f5f5f5; padding: 7px 10px; text-align: left; font-weight: 600; font-size: 12px; border-bottom: 2px solid #ddd; white-space: nowrap; }
+td { padding: 6px 10px; border-bottom: 1px solid #eee; vertical-align: middle; }
+tr:hover td { background: #fafafa; }
+.amount { text-align: right; font-variant-numeric: tabular-nums; }
+.method-bank   { background: #e3f2fd; color: #0d47a1; border-radius: 3px; padding: 1px 6px; font-size: 11px; }
+.method-card   { background: #e8f5e9; color: #1b5e20; border-radius: 3px; padding: 1px 6px; font-size: 11px; }
+.method-receipt{ background: #fff3e0; color: #e65100; border-radius: 3px; padding: 1px 6px; font-size: 11px; }
+.invoice-num { font-family: monospace; font-size: 12px; color: #555; }
+.total-row td { font-weight: 700; background: #f5f5f5; }
+.no-data { text-align: center; color: #999; padding: 24px; }
+
+/* Modal */
+.overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.5); z-index: 100; align-items: center; justify-content: center; }
+.overlay.open { display: flex; }
+.modal { background: #fff; border-radius: 8px; width: 480px; max-width: 95vw; max-height: 90vh; overflow-y: auto; }
+.modal-header { padding: 14px 16px; border-bottom: 1px solid #ddd; display: flex; justify-content: space-between; align-items: center; font-weight: 600; }
+.modal-body { padding: 16px; display: flex; flex-direction: column; gap: 12px; }
+.modal-footer { padding: 12px 16px; border-top: 1px solid #ddd; display: flex; justify-content: flex-end; gap: 8px; }
+label { display: block; font-size: 12px; color: #555; margin-bottom: 3px; }
+.form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+input[type=text], input[type=number], input[type=date], select { width: 100%; }
+.suggestions { border: 1px solid #ccc; border-radius: 4px; max-height: 160px; overflow-y: auto; display: none; background: #fff; position: absolute; z-index: 10; width: 100%; }
+.suggestion-item { padding: 6px 10px; cursor: pointer; }
+.suggestion-item:hover { background: #e8eaf6; }
+.rel { position: relative; }
+
+/* TX picker */
+.tx-list { max-height: 60vh; overflow-y: auto; }
+.tx-item { display: flex; align-items: center; gap: 8px; padding: 5px 10px; border-bottom: 1px solid #eee; cursor: pointer; }
+.tx-item:hover { background: #f0f0f0; }
+.tx-item input[type=checkbox] { flex-shrink: 0; }
+.tx-bank-tag { font-size: 10px; background: #e0e0e0; border-radius: 3px; padding: 1px 5px; }
+.filter-bar { display: flex; gap: 6px; padding: 8px 10px; border-bottom: 1px solid #ddd; }
+.filter-bar input { flex: 1; }
+</style>
+</head>
+<body>
+<!--MF2_MASK_WIDGET-->
+<header>
+  <a href="/ui" style="display:flex;align-items:center;text-decoration:none;color:inherit;align-self:stretch;margin:-10px 10px -10px -16px;padding:0 12px">
+    <span style="font-size:15px;font-weight:800;letter-spacing:-0.5px;line-height:1;white-space:nowrap;user-select:none">Open<span style="color:#9fa8da">Money</span></span>
+  </a>
+  <h1 style="font-size:14px;font-weight:500">🧾 インボイス管理</h1>
+  <div style="margin-left:auto;display:flex;gap:14px">
+    <a href="/ui">💸 支出分類</a>
+    <a href="/blue_form">📘 青色申告</a>
+  </div>
+</header>
+<div class="main">
+  <div class="toolbar">
+    <select id="yearSel"></select>
+    <button class="btn-primary" onclick="openAddModal()">+ 明細追加</button>
+    <button class="btn-secondary" onclick="openTxPicker()">取引から追加</button>
+    <button class="btn-secondary" onclick="toggleVendors()">事業者番号マスター</button>
+    <button id="matchedMonthsBtn" class="btn-secondary" onclick="toggleMatchedMonths()"
+            title="当月・先月を除いた突合可能な月のみ表示">突合完了月</button>
+    <button class="btn-secondary" onclick="exportCsv()">CSV出力</button>
+    <button class="btn-secondary" id="staleBtn" style="color:#c62828" onclick="showStale()" title="/ui Pull で代替できる旧 manual エントリを検出">🧹 旧 manual 整理</button>
+  </div>
+
+  <!-- 集計カード -->
+  <div class="card">
+    <div class="card-header">事業者番号別集計</div>
+    <table>
+      <thead><tr>
+        <th>事業者番号</th><th>会社名</th>
+        <th class="amount">銀行引き落とし</th>
+        <th class="amount">クレジットカード</th>
+        <th class="amount">紙レシート</th>
+        <th class="amount">合計</th>
+      </tr></thead>
+      <tbody id="summaryBody"></tbody>
+    </table>
+  </div>
+
+  <!-- 事業者マスター -->
+  <div class="card" id="vendorCard" style="display:none">
+    <div class="card-header">
+      事業者番号マスター
+      <button class="btn-primary btn-sm" onclick="openVendorModal()">+ 追加</button>
+      <button class="btn-secondary btn-sm" style="color:#c62828" onclick="cleanupUnusedVendors()" title="集計で使われていない vendor を一括削除">🧹 未使用削除</button>
+    </div>
+    <table>
+      <thead><tr><th>サービス名（表示名）</th><th>会社名（法人名）</th><th>事業者番号（T+13桁）</th><th></th></tr></thead>
+      <tbody id="vendorBody"></tbody>
+    </table>
+  </div>
+
+  <!-- 明細カード -->
+  <div class="card">
+    <div class="card-header">明細一覧 <span id="itemCount" style="font-weight:normal;font-size:11px;color:#666"></span></div>
+    <table>
+      <thead><tr>
+        <th>日付</th><th>会社名</th><th>事業者番号</th>
+        <th class="amount">金額</th><th>支払方法</th><th>摘要</th><th></th>
+      </tr></thead>
+      <tbody id="itemBody"></tbody>
+    </table>
+  </div>
+</div>
+
+<!-- 明細追加/編集モーダル -->
+<div class="overlay" id="itemModal">
+  <div class="modal">
+    <div class="modal-header">
+      <span id="modalTitle">明細追加</span>
+      <button class="btn-secondary btn-sm" onclick="closeModal('itemModal')">×</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-row">
+        <div>
+          <label>年</label>
+          <input type="text" id="fYear" placeholder="2026" maxlength="4">
+        </div>
+        <div>
+          <label>日付</label>
+          <input type="date" id="fDate">
+        </div>
+      </div>
+      <div>
+        <label>会社名</label>
+        <div class="rel">
+          <input type="text" id="fCompany" placeholder="会社名を入力" autocomplete="off"
+            oninput="onCompanyInput()" onfocus="onCompanyInput()">
+          <div class="suggestions" id="companySuggest"></div>
+        </div>
+      </div>
+      <div>
+        <label>事業者番号（T + 13桁）</label>
+        <input type="text" id="fInvoiceNum" placeholder="T1234567890123" maxlength="14">
+      </div>
+      <div class="form-row">
+        <div>
+          <label>金額（円）</label>
+          <input type="number" id="fAmount" min="0" step="1">
+        </div>
+        <div>
+          <label>支払方法</label>
+          <select id="fMethod">
+            <option value="bank">銀行引き落とし</option>
+            <option value="card">クレジットカード</option>
+            <option value="receipt">紙レシート</option>
+          </select>
+        </div>
+      </div>
+      <div>
+        <label>摘要</label>
+        <input type="text" id="fDesc" placeholder="内容・備考">
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn-secondary" onclick="closeModal('itemModal')">キャンセル</button>
+      <button class="btn-primary" id="modalSaveBtn" onclick="saveItem()">保存</button>
+    </div>
+  </div>
+</div>
+
+<!-- 事業者マスターモーダル -->
+<div class="overlay" id="vendorModal">
+  <div class="modal">
+    <div class="modal-header">
+      <span id="vendorModalTitle">事業者登録</span>
+      <button class="btn-secondary btn-sm" onclick="closeModal('vendorModal')">×</button>
+    </div>
+    <div class="modal-body">
+      <div>
+        <label>サービス名（表示名・変更不可）</label>
+        <input type="text" id="vServiceName" placeholder="Amazon / 楽天市場 など" readonly
+          style="background:#f5f5f5;color:#777">
+      </div>
+      <div>
+        <label>会社名（法人名）</label>
+        <input type="text" id="vCompany" placeholder="アマゾンジャパン合同会社">
+      </div>
+      <div>
+        <label>事業者番号（T + 13桁）</label>
+        <input type="text" id="vInvoiceNum" placeholder="T1234567890123" maxlength="14">
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn-secondary" onclick="closeModal('vendorModal')">キャンセル</button>
+      <button class="btn-primary" onclick="saveVendor()">保存</button>
+    </div>
+  </div>
+</div>
+
+<!-- 取引から追加モーダル -->
+<div class="overlay" id="txModal">
+  <div class="modal" style="width:640px">
+    <div class="modal-header">
+      <span>取引から経費明細を追加</span>
+      <button class="btn-secondary btn-sm" onclick="closeModal('txModal')">×</button>
+    </div>
+    <div class="filter-bar">
+      <input type="text" id="txFilter" placeholder="会社名・説明で絞り込み" oninput="filterTxList()">
+      <select id="txMethodSel">
+        <option value="card">クレジットカード</option>
+        <option value="bank">銀行引き落とし</option>
+        <option value="receipt">紙レシート</option>
+      </select>
+    </div>
+    <div class="tx-list" id="txList"></div>
+    <div class="modal-footer">
+      <button class="btn-secondary" onclick="closeModal('txModal')">キャンセル</button>
+      <button class="btn-primary" onclick="importSelectedTx()">選択した取引を追加</button>
+    </div>
+  </div>
+</div>
+
+<script>
+let vendors = [];
+let items = [];
+let allTx = [];
+let editingId = null;
+let matchedMonthsOnly = localStorage.getItem('tax_matched_months') === '1';
+
+function _matchableCutoff() {
+  // 突合可能な最新月（当月・先月を除いた先々月）を 'YYYY/MM' で返す。
+  const now = new Date();
+  let yr = now.getFullYear(), mo = now.getMonth() + 1 - 2;
+  if (mo <= 0) { mo += 12; yr -= 1; }
+  return `${yr}/${String(mo).padStart(2, '0')}`;
+}
+
+function _filteredItems() {
+  if (!matchedMonthsOnly) return items;
+  const cutoff = _matchableCutoff();
+  return items.filter(it => (it.date || '').slice(0, 7) <= cutoff);
+}
+
+function toggleMatchedMonths() {
+  matchedMonthsOnly = !matchedMonthsOnly;
+  localStorage.setItem('tax_matched_months', matchedMonthsOnly ? '1' : '0');
+  _refreshMatchedMonthsBtn();
+  renderSummary();
+  renderItems();
+}
+
+function _refreshMatchedMonthsBtn() {
+  const btn = document.getElementById('matchedMonthsBtn');
+  if (!btn) return;
+  if (matchedMonthsOnly) {
+    btn.style.background = '#1a237e';
+    btn.style.color = '#fff';
+  } else {
+    btn.style.background = '';
+    btn.style.color = '';
+  }
+}
+const METHOD_LABEL = { bank: '銀行引き落とし', card: 'クレジットカード', receipt: '紙レシート' };
+const METHOD_CLASS = { bank: 'method-bank', card: 'method-card', receipt: 'method-receipt' };
+
+function fmt(n) { return Number(n||0).toLocaleString('ja-JP'); }
+function esc(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+// ── 初期化 ──────────────────────────────────────────────────────────────────
+async function init() {
+  // 年セレクタ
+  const yearSel = document.getElementById('yearSel');
+  const curYear = new Date().getFullYear();
+  for (let y = curYear; y >= curYear - 5; y--) {
+    yearSel.innerHTML += `<option value="${y}">${y}年</option>`;
+  }
+  yearSel.onchange = () => load();
+
+  _refreshMatchedMonthsBtn();
+
+  // has_invoice + カテゴリ設定済み取引を自動同期（ベンダーマスター作成 + 明細追加）
+  const syncRes = await fetch('/api/tax/sync', { method: 'POST' }).then(r => r.json());
+  if (syncRes.vendors_added > 0 || syncRes.items_added > 0) {
+    console.log(`[tax sync] vendors+${syncRes.vendors_added} items+${syncRes.items_added}`);
+  }
+
+  await Promise.all([loadVendors(), load()]);
+}
+
+async function loadVendors() {
+  vendors = await fetch('/api/tax/vendors').then(r => r.json());
+  renderVendors();
+}
+
+async function load() {
+  const year = document.getElementById('yearSel').value;
+  items = await fetch(`/api/tax/items?year=${year}`).then(r => r.json());
+  renderSummary();
+  renderItems();
+}
+
+// ── 集計 ──────────────────────────────────────────────────────────────────
+function renderSummary() {
+  const visibleItems = _filteredItems();
+  const byKey = {};
+  for (const it of visibleItems) {
+    const inv = it.resolved_invoice_number || it.invoice_number || '';
+    const key = inv || '（未登録）';
+    if (!byKey[key]) byKey[key] = { invoice_number: inv, companies: new Set(), bank: 0, card: 0, receipt: 0 };
+    byKey[key].companies.add(it.resolved_company || it.service_name || it.company_name || '');
+    byKey[key][it.payment_method] = (byKey[key][it.payment_method] || 0) + it.amount;
+  }
+  let totalBank = 0, totalCard = 0, totalReceipt = 0;
+  let html = '';
+  for (const [key, g] of Object.entries(byKey)) {
+    const total = g.bank + g.card + g.receipt;
+    totalBank += g.bank; totalCard += g.card; totalReceipt += g.receipt;
+    html += `<tr>
+      <td class="invoice-num">${esc(g.invoice_number) || '<span style="color:#aaa">未登録</span>'}</td>
+      <td class="company">${esc([...g.companies].join(' / '))}</td>
+      <td class="amount">${g.bank ? '¥'+fmt(g.bank) : '-'}</td>
+      <td class="amount">${g.card ? '¥'+fmt(g.card) : '-'}</td>
+      <td class="amount">${g.receipt ? '¥'+fmt(g.receipt) : '-'}</td>
+      <td class="amount"><strong>¥${fmt(total)}</strong></td>
+    </tr>`;
+  }
+  if (visibleItems.length === 0) {
+    html = '<tr><td colspan="6" class="no-data">明細がありません</td></tr>';
+  } else {
+    html += `<tr class="total-row">
+      <td colspan="2">合計</td>
+      <td class="amount">¥${fmt(totalBank)}</td>
+      <td class="amount">¥${fmt(totalCard)}</td>
+      <td class="amount">¥${fmt(totalReceipt)}</td>
+      <td class="amount">¥${fmt(totalBank+totalCard+totalReceipt)}</td>
+    </tr>`;
+  }
+  document.getElementById('summaryBody').innerHTML = html;
+}
+
+// ── 明細 ──────────────────────────────────────────────────────────────────
+function _itemRowHtml(it, isChild) {
+  const dispName = it.resolved_company || it.service_name || it.company_name || '';
+  const dispInv  = it.resolved_invoice_number || it.invoice_number || '';
+  const isAuto = it.source_tx_id;
+  const namePart = isAuto
+    ? `<span style="color:#777">${esc(it.service_name)}</span>`
+      + (dispName && dispName !== it.service_name ? ` <span style="font-size:11px;color:#333">${esc(dispName)}</span>` : '')
+    : esc(dispName);
+  const receiptIds = it.receipt_ids ? it.receipt_ids.split(',') : [];
+  const receiptBtn = receiptIds.length > 0
+    ? receiptIds.map(rid => `<button class="btn-secondary btn-sm" title="レシート表示" onclick="openTaxReceipt(${rid})" style="padding:1px 5px">🧾</button>`).join('')
+    : '';
+  const pdfUrl = taxInvoiceUrl(it.source_bank, it.source_description, it.source_tx_id);
+  const pdfBtn = pdfUrl
+    ? `<button class="btn-secondary btn-sm" title="PDF領収書" onclick="openPdfModal('${pdfUrl}','${esc(it.service_name)}')" style="padding:1px 5px">📄</button>`
+    : '';
+  const indent = isChild ? 'padding-left:32px;color:#666;font-size:12px' : '';
+  return `<tr ${isChild ? 'class="grp-child" style="display:none;background:#fafafa"' : ''}>
+    <td style="white-space:nowrap;${indent}">${esc(it.date)}</td>
+    <td class="company">${isChild ? '<span style="color:#999;font-size:11px">↳</span> ' : ''}${namePart}${isAuto ? ' <span style="font-size:10px;color:#888;background:#f0f0f0;border-radius:3px;padding:1px 4px">自動</span>' : ''}</td>
+    <td class="invoice-num">${esc(dispInv) || '<span style="color:#aaa">-</span>'}</td>
+    <td class="amount">¥${fmt(it.amount)}</td>
+    <td><span class="${METHOD_CLASS[it.payment_method]||'method-card'}">${esc(METHOD_LABEL[it.payment_method]||it.payment_method)}</span></td>
+    <td style="color:#666;font-size:12px">${esc(it.description)}</td>
+    <td style="white-space:nowrap">
+      ${pdfBtn}${receiptBtn}
+      <button class="btn-secondary btn-sm" onclick="openEditModal('${it.id}')">編集</button>
+    </td>
+  </tr>`;
+}
+
+function _groupParentRowHtml(groupId, items) {
+  const head = items[0];
+  const total = items.reduce((a, x) => a + (x.amount || 0), 0);
+  const dispName = head.resolved_company || head.service_name || head.company_name || '';
+  const dispInv  = head.resolved_invoice_number || head.invoice_number || '';
+  const isAuto = head.source_tx_id;
+  const namePart = isAuto
+    ? `<span style="color:#777">${esc(head.service_name)}</span>`
+      + (dispName && dispName !== head.service_name ? ` <span style="font-size:11px;color:#333">${esc(dispName)}</span>` : '')
+    : esc(dispName);
+  const receiptIds = head.receipt_ids ? head.receipt_ids.split(',') : [];
+  const receiptBtn = receiptIds.length > 0
+    ? receiptIds.map(rid => `<button class="btn-secondary btn-sm" title="レシート表示" onclick="openTaxReceipt(${rid})" style="padding:1px 5px">🧾</button>`).join('')
+    : '';
+  const pdfUrl = taxInvoiceUrl(head.source_bank, head.source_description, head.source_tx_id);
+  const pdfBtn = pdfUrl
+    ? `<button class="btn-secondary btn-sm" title="PDF領収書" onclick="openPdfModal('${pdfUrl}','${esc(head.service_name)}')" style="padding:1px 5px">📄</button>`
+    : '';
+  return `<tr class="grp-parent" data-grp="${groupId}" style="cursor:pointer;background:#f0f4ff" onclick="toggleGroup('${groupId}')">
+    <td style="white-space:nowrap"><span class="grp-arrow" style="display:inline-block;width:14px">▶</span>${esc(head.date)}</td>
+    <td class="company">${namePart}${isAuto ? ' <span style="font-size:10px;color:#888;background:#f0f0f0;border-radius:3px;padding:1px 4px">自動</span>' : ''}
+      <span style="font-size:10px;color:#1976d2;background:#e3f2fd;border-radius:3px;padding:1px 4px;margin-left:4px">${items.length} 件 まとめ</span></td>
+    <td class="invoice-num">${esc(dispInv) || '<span style="color:#aaa">-</span>'}</td>
+    <td class="amount"><b>¥${fmt(total)}</b></td>
+    <td><span class="${METHOD_CLASS[head.payment_method]||'method-card'}">${esc(METHOD_LABEL[head.payment_method]||head.payment_method)}</span></td>
+    <td style="color:#666;font-size:12px;overflow:hidden;text-overflow:ellipsis;max-width:280px"
+        title="${esc(items.map(it => it.description || '').filter(s => s).join(' / '))}">
+      ${items.map(it => esc(it.description || '').slice(0, 18)).filter(s => s).join(' / ')}
+    </td>
+    <td style="white-space:nowrap">${pdfBtn}${receiptBtn}</td>
+  </tr>`;
+}
+
+function toggleGroup(grpId) {
+  const parent = document.querySelector(`tr.grp-parent[data-grp="${grpId}"]`);
+  if (!parent) return;
+  const arrow = parent.querySelector('.grp-arrow');
+  const open = arrow.textContent === '▼';
+  arrow.textContent = open ? '▶' : '▼';
+  let n = parent.nextElementSibling;
+  while (n && n.classList.contains('grp-child') && n.dataset.grp === grpId) {
+    n.style.display = open ? 'none' : '';
+    n = n.nextElementSibling;
+  }
+}
+
+function renderItems() {
+  const visibleItems = _filteredItems();
+  const totalCnt = items.length;
+  const visibleCnt = visibleItems.length;
+  document.getElementById('itemCount').textContent =
+    matchedMonthsOnly ? `（${visibleCnt}/${totalCnt}件）` : `（${totalCnt}件）`;
+  if (!visibleItems.length) {
+    document.getElementById('itemBody').innerHTML = '<tr><td colspan="7" class="no-data">明細がありません</td></tr>';
+    return;
+  }
+  // (date, source_tx_id, invoice_number) でグループ化 → 1 取引 1 親行 + 内訳子行
+  const groups = new Map();
+  const order = [];
+  for (const it of visibleItems) {
+    const key = it.source_tx_id
+      ? `tx:${it.source_tx_id}:${it.invoice_number || ''}`
+      : `manual:${it.id}`;
+    if (!groups.has(key)) { groups.set(key, []); order.push(key); }
+    groups.get(key).push(it);
+  }
+  const html = [];
+  for (const key of order) {
+    const grp = groups.get(key);
+    if (grp.length === 1) {
+      html.push(_itemRowHtml(grp[0], false));
+    } else {
+      const safeKey = key.replace(/[^a-zA-Z0-9_]/g, '_');
+      html.push(_groupParentRowHtml(safeKey, grp));
+      for (const child of grp) {
+        const childRow = _itemRowHtml(child, true).replace(
+          '<tr class="grp-child"',
+          `<tr class="grp-child" data-grp="${safeKey}"`
+        );
+        html.push(childRow);
+      }
+    }
+  }
+  document.getElementById('itemBody').innerHTML = html.join('');
+}
+
+async function openTaxReceipt(receiptId) {
+  const res = await fetch(`/api/receipts/${receiptId}/image`);
+  if (!res.ok) { alert('レシート画像が見つかりません'); return; }
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  const modal = document.getElementById('taxReceiptModal');
+  document.getElementById('taxReceiptImg').src = url;
+  modal.style.display = 'flex';
+}
+
+function taxInvoiceUrl(bank, desc, txId) {
+  if (!bank) return null;
+  // ヤフオク購入は description に order_id を含まない → tx_id ベースで取得
+  if (bank === 'ヤフオク購入' && txId) return `/api/yahuoku-invoice/${txId}`;
+  if (!desc) return null;
+  const m = desc.match(/\[([^\]/]+)/);
+  const id = m ? m[1] : '';
+  if (!id) return null;
+  if (bank === 'Amazon')           return `/api/amazon-invoice/${id}`;
+  if (bank === 'Mercari' || bank === 'Mercari売上') return `/api/mercari-invoice/${id}`;
+  if (bank === 'Yahoo!ショッピング') return `/api/yahoo-shopping-invoice/${id}`;
+  if (bank === '楽天市場')          return `/api/rakuten-invoice/${id}`;
+  if (bank === 'CAMPFIRE')          return `/api/campfire-invoice/${id}`;
+  return null;
+}
+
+let _pdfModalWin = null;
+function openPdfModal(url, title) {
+  if (_pdfModalWin && !_pdfModalWin.closed) _pdfModalWin.close();
+  _pdfModalWin = window.open(url, '_blank', 'width=900,height=700,scrollbars=yes');
+}
+
+// ── 事業者マスター ────────────────────────────────────────────────────────
+function toggleVendors() {
+  const card = document.getElementById('vendorCard');
+  card.style.display = card.style.display === 'none' ? '' : 'none';
+}
+
+function renderVendors() {
+  document.getElementById('vendorBody').innerHTML = vendors.length
+    ? vendors.map(v => `<tr>
+        <td style="color:#777;font-size:12px">${esc(v.service_name) || '<span style="color:#aaa">-</span>'}</td>
+        <td class="company">${esc(v.company_name) || '<span style="color:#f90;font-size:11px">未入力</span>'}</td>
+        <td class="invoice-num">${esc(v.invoice_number) || '<span style="color:#aaa">未登録</span>'}</td>
+        <td style="white-space:nowrap">
+          <button class="btn-secondary btn-sm" onclick="openVendorEdit(${v.id})">編集</button>
+          <button class="btn-secondary btn-sm" style="color:#c62828" onclick="deleteVendor(${v.id})" title="使用中なら拒否される">🗑 削除</button>
+        </td>
+      </tr>`).join('')
+    : '<tr><td colspan="4" class="no-data">登録なし</td></tr>';
+}
+
+let editingVendorId = null;
+
+function openVendorModal() {
+  editingVendorId = null;
+  document.getElementById('vendorModalTitle').textContent = '事業者登録（手動）';
+  document.getElementById('vServiceName').value = '';
+  document.getElementById('vServiceName').removeAttribute('readonly');
+  document.getElementById('vCompany').value = '';
+  document.getElementById('vInvoiceNum').value = '';
+  document.getElementById('vendorModal').classList.add('open');
+}
+
+function openVendorEdit(id) {
+  const v = vendors.find(x => x.id === id);
+  if (!v) return;
+  editingVendorId = id;
+  document.getElementById('vendorModalTitle').textContent = '事業者編集';
+  document.getElementById('vServiceName').value = v.service_name || '';
+  document.getElementById('vServiceName').setAttribute('readonly', '');
+  document.getElementById('vCompany').value = v.company_name || '';
+  document.getElementById('vInvoiceNum').value = v.invoice_number || '';
+  document.getElementById('vendorModal').classList.add('open');
+}
+
+async function saveVendor() {
+  const serviceName = document.getElementById('vServiceName').value.trim();
+  const company = document.getElementById('vCompany').value.trim();
+  const inv = document.getElementById('vInvoiceNum').value.trim();
+  if (!company && !serviceName) return alert('会社名またはサービス名を入力してください');
+  await fetch('/api/tax/vendors', { method: 'POST', headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({ service_name: serviceName, company_name: company, invoice_number: inv }) });
+  closeModal('vendorModal');
+  await loadVendors();
+}
+
+async function cleanupUnusedVendors() {
+  // 旧 manual + 未使用 vendor を一括取得して確認 dialog
+  const [stale, unused] = await Promise.all([
+    fetch('/api/tax/items-stale').then(r => r.json()),
+    fetch('/api/tax/vendors-unused').then(r => r.json()),
+  ]);
+  if (!stale.length && !unused.length) {
+    alert('整理対象なし (旧 manual と未使用 vendor は 0 件)');
+    return;
+  }
+  const lines = unused.map(v =>
+    `  ${v.service_name || '(空)'} / ${v.company_name || '(空)'} / ${v.invoice_number || '(空)'}`
+  ).slice(0, 20).join('\n');
+  const msg = `自動 cleanup:\n\n` +
+    `1. 旧 manual エントリ ${stale.length} 件 削除 (= /ui Pull 代替済)\n` +
+    `2. 未使用 vendor ${unused.length} 件 削除\n\n` +
+    (lines ? `vendor 候補 (上位 20):\n${lines}\n${unused.length > 20 ? '  ...他\n' : ''}` : '') +
+    `\n実行しますか？ (集計データには影響しません)`;
+  if (!confirm(msg)) return;
+  const r = await fetch('/api/tax/vendors/cleanup-unused', { method: 'POST' }).then(r => r.json());
+  alert(`旧 manual 削除: ${r.deleted_stale_items} 件 / 未使用 vendor 削除: ${r.deleted_vendors} 件`);
+  await loadVendors();
+  await load();
+}
+
+async function deleteVendor(id) {
+  if (!confirm('削除しますか？ (使用中の場合は拒否されます)')) return;
+  const res = await fetch(`/api/tax/vendors/${id}`, { method: 'DELETE' });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    if (res.status === 409) {
+      alert(`削除できません: 使用中の事業者です\n参照元: ${err.detail || '?'}`);
+      return;
+    }
+    alert(`削除失敗: ${res.status} ${err.detail || ''}`);
+    return;
+  }
+  await loadVendors();
+}
+
+// ── 明細 CRUD ────────────────────────────────────────────────────────────
+function openAddModal() {
+  editingId = null;
+  document.getElementById('modalTitle').textContent = '明細追加';
+  document.getElementById('modalSaveBtn').textContent = '追加';
+  const year = document.getElementById('yearSel').value;
+  document.getElementById('fYear').value = year;
+  document.getElementById('fDate').value = '';
+  document.getElementById('fCompany').value = '';
+  document.getElementById('fInvoiceNum').value = '';
+  document.getElementById('fAmount').value = '';
+  document.getElementById('fMethod').value = 'card';
+  document.getElementById('fDesc').value = '';
+  document.getElementById('itemModal').classList.add('open');
+}
+
+function openEditModal(id) {
+  const it = items.find(x => x.id === id);
+  if (!it) return;
+  editingId = id;
+  document.getElementById('modalTitle').textContent = '明細編集';
+  document.getElementById('modalSaveBtn').textContent = '更新';
+  document.getElementById('fYear').value = it.year;
+  document.getElementById('fDate').value = it.date;
+  document.getElementById('fCompany').value = it.company_name || '';
+  document.getElementById('fInvoiceNum').value = it.invoice_number || '';
+  document.getElementById('fAmount').value = it.amount;
+  document.getElementById('fMethod').value = it.payment_method;
+  document.getElementById('fDesc').value = it.description;
+  document.getElementById('itemModal').classList.add('open');
+}
+
+async function saveItem() {
+  const body = {
+    year: document.getElementById('fYear').value.trim(),
+    company_name: document.getElementById('fCompany').value.trim(),
+    invoice_number: document.getElementById('fInvoiceNum').value.trim(),
+    amount: parseInt(document.getElementById('fAmount').value) || 0,
+    payment_method: document.getElementById('fMethod').value,
+    date: document.getElementById('fDate').value,
+    description: document.getElementById('fDesc').value.trim(),
+  };
+  if (!body.year || !body.amount) return alert('年・金額は必須です');
+  if (!body.company_name && !body.service_name) return alert('会社名またはサービス名を入力してください');
+
+  // 会社名/サービス名があればベンダーマスター (invoice_vendors) に upsert。
+  // 不正な invoice_number は API 側 normalize_invoice_number で正規化/拒否される。
+  if (body.company_name || body.service_name) {
+    await fetch('/api/tax/vendors', { method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ service_name: body.service_name, company_name: body.company_name,
+                             invoice_number: body.invoice_number }) });
+    await loadVendors();
+  }
+
+  const url = editingId ? `/api/tax/items/${editingId}` : '/api/tax/items';
+  const method = editingId ? 'PUT' : 'POST';
+  await fetch(url, { method, headers: {'Content-Type':'application/json'}, body: JSON.stringify(body) });
+  closeModal('itemModal');
+  await load();
+}
+
+async function deleteItem(id) {
+  if (!confirm('削除しますか？')) return;
+  await fetch(`/api/tax/items/${id}`, { method: 'DELETE' });
+  await load();
+}
+
+// ── 会社名オートコンプリート ──────────────────────────────────────────────
+function onCompanyInput() {
+  const val = document.getElementById('fCompany').value.toLowerCase();
+  const matches = vendors.filter(v =>
+    (v.company_name||'').toLowerCase().includes(val) ||
+    (v.service_name||'').toLowerCase().includes(val)
+  );
+  const box = document.getElementById('companySuggest');
+  if (!matches.length) { box.style.display = 'none'; return; }
+  box.style.display = '';
+  box.innerHTML = matches.map(v => {
+    const label = v.company_name || v.service_name || '';
+    const sub = v.company_name && v.service_name ? v.service_name : '';
+    return `<div class="suggestion-item" onclick="selectCompany(${JSON.stringify(v.service_name||'')}, ${JSON.stringify(v.company_name||'')}, ${JSON.stringify(v.invoice_number||'')})">
+      ${esc(label)}${sub ? ` <span style="color:#aaa;font-size:10px">${esc(sub)}</span>` : ''}
+      <span style="color:#888;font-size:11px">${esc(v.invoice_number)}</span>
+    </div>`;
+  }).join('');
+}
+
+function selectCompany(serviceName, companyName, inv) {
+  document.getElementById('fCompany').value = companyName || serviceName;
+  document.getElementById('fInvoiceNum').value = inv;
+  document.getElementById('companySuggest').style.display = 'none';
+}
+document.addEventListener('click', e => {
+  if (!e.target.closest('#fCompany') && !e.target.closest('#companySuggest'))
+    document.getElementById('companySuggest').style.display = 'none';
+});
+
+// ── 取引から追加 ─────────────────────────────────────────────────────────
+async function openTxPicker() {
+  const year = document.getElementById('yearSel').value;
+  allTx = await fetch(`/api/tax/tx-suggestions?year=${year}`).then(r => r.json());
+  renderTxList(allTx);
+  document.getElementById('txFilter').value = '';
+  document.getElementById('txModal').classList.add('open');
+}
+
+function renderTxList(txs) {
+  if (!txs.length) {
+    document.getElementById('txList').innerHTML = '<div class="no-data">取引がありません</div>';
+    return;
+  }
+  document.getElementById('txList').innerHTML = txs.map(t => `
+    <div class="tx-item">
+      <input type="checkbox" id="tx_${t.id}" value="${t.id}">
+      <label for="tx_${t.id}" style="flex:1;cursor:pointer">
+        <span style="color:#555;font-size:11px">${esc(t.date)}</span>
+        <span class="tx-bank-tag">${esc(t.bank)}</span>
+        ${t.has_invoice ? '<span title="領収書あり">📄</span>' : ''}
+        ${esc((t.description||'').slice(0,60))}
+      </label>
+      <span style="font-weight:600;white-space:nowrap">¥${fmt(t.debit)}</span>
+    </div>
+  `).join('');
+}
+
+function filterTxList() {
+  const q = document.getElementById('txFilter').value.toLowerCase();
+  renderTxList(q ? allTx.filter(t =>
+    (t.description||'').toLowerCase().includes(q) || (t.bank||'').toLowerCase().includes(q)
+  ) : allTx);
+}
+
+async function importSelectedTx() {
+  const year = document.getElementById('yearSel').value;
+  const method = document.getElementById('txMethodSel').value;
+  const checked = [...document.querySelectorAll('#txList input[type=checkbox]:checked')];
+  if (!checked.length) return alert('取引を選択してください');
+
+  for (const cb of checked) {
+    const tx = allTx.find(t => t.id === parseInt(cb.value));
+    if (!tx) continue;
+    // service_name (= bank) でベンダーを検索して invoice_number を補完
+    const vendor = vendors.find(v => v.service_name === tx.bank);
+    const invNum = vendor?.invoice_number || '';
+    const body = {
+      year,
+      service_name: tx.bank,
+      company_name: '',
+      invoice_number: invNum,
+      amount: tx.debit,
+      payment_method: method,
+      date: tx.date,
+      description: (tx.description||'').slice(0, 80),
+    };
+    await fetch('/api/tax/items', { method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify(body) });
+    if (tx.has_invoice && !vendor) {
+      await fetch('/api/tax/vendors', { method: 'POST', headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({ service_name: tx.bank, company_name: '', invoice_number: invNum }) });
+    }
+  }
+  closeModal('txModal');
+  await Promise.all([loadVendors(), load()]);
+}
+
+// ── CSV出力 ──────────────────────────────────────────────────────────────
+function exportCsv() {
+  const year = document.getElementById('yearSel').value;
+  const header = '日付,会社名,事業者番号,金額,支払方法,摘要\n';
+  const rows = items.map(it =>
+    [it.date, it.resolved_company||it.service_name||it.company_name,
+     it.resolved_invoice_number||it.invoice_number, it.amount,
+     METHOD_LABEL[it.payment_method]||it.payment_method, it.description]
+    .map(v => `"${String(v||'').replace(/"/g,'""')}"`)
+    .join(',')
+  ).join('\n');
+  const blob = new Blob(['﻿' + header + rows], { type: 'text/csv' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `インボイス管理_${year}.csv`;
+  a.click();
+}
+
+// ── 旧 manual 整理 ────────────────────────────────────────────────────────
+async function showStale() {
+  const year = document.getElementById('yearSel').value;
+  const param = year ? `?year=${year}` : '';
+  const stale = await fetch(`/api/tax/items-stale${param}`).then(r => r.json());
+  if (!stale.length) {
+    alert('整理対象の旧 manual エントリはありません');
+    return;
+  }
+  const total = stale.reduce((a, x) => a + (x.amount||0), 0);
+  const lines = stale.map(s => {
+    const co = s.resolved_company || s.company_name || s.service_name || '?';
+    const inv = s.resolved_invoice_number || s.invoice_number || '(空)';
+    return `  [${s.date}] ${co} ¥${(s.amount||0).toLocaleString()} (${inv})`;
+  }).slice(0, 30).join('\n');
+  const msg = `/ui Pull で代替可能な旧 manual エントリ ${stale.length} 件 (合計 ¥${total.toLocaleString()}):\n\n${lines}${stale.length > 30 ? '\n  ...他' : ''}\n\n一括削除しますか？ (/ui 側のレシート/メタは保持されます)`;
+  if (!confirm(msg)) return;
+  const res = await fetch(`/api/tax/items/cleanup-stale${param}`, { method: 'POST' });
+  const r = await res.json();
+  alert(`削除: ${r.deleted} 件`);
+  await load();
+}
+
+// ── ユーティリティ ────────────────────────────────────────────────────────
+function closeModal(id) {
+  document.getElementById(id).classList.remove('open');
+}
+
+init();
+</script>
+<div id="taxReceiptModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:200;align-items:center;justify-content:center" onclick="this.style.display='none'">
+  <img id="taxReceiptImg" src="" style="max-width:90vw;max-height:90vh;border-radius:8px;box-shadow:0 4px 24px rgba(0,0,0,.5)" onclick="event.stopPropagation()">
+</div>
+</body>
+</html>

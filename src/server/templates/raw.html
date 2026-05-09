@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>生データ · OpenMoney</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-size: 13px; background: #f5f5f5; color: #333; }
+body > header { background: #1a1a2e; color: #fff; padding: 10px 16px; display: flex; align-items: center; gap: 16px; position: sticky; top: 0; z-index: 100; }
+body > header h1 { font-size: 14px; font-weight: 500; margin: 0; }
+body > header a { color: #aac4ff; text-decoration: none; font-size: 12px; }
+.page-body { padding: 20px; }
+nav a { font-size: 12px; color: #1976d2; text-decoration: none; margin-right: 16px; }
+.layout { display: grid; grid-template-columns: 240px 1fr; gap: 16px; }
+.sidebar { background: #fff; border-radius: 8px; padding: 12px; max-height: 80vh; overflow-y: auto; box-shadow: 0 1px 3px rgba(0,0,0,.06); }
+.sidebar h3 { font-size: 11px; color: #888; margin: 8px 0 6px; text-transform: uppercase; }
+.svc-item { display: block; padding: 8px 10px; border-radius: 4px; cursor: pointer; margin-bottom: 2px; font-size: 12px; }
+.svc-item:hover { background: #f0f0f0; }
+.svc-item.active { background: #1976d2; color: #fff; }
+.svc-item.orphan { opacity: .65; font-style: italic; }
+.svc-meta { font-size: 10px; color: inherit; opacity: .6; }
+.main { background: #fff; border-radius: 8px; padding: 16px; box-shadow: 0 1px 3px rgba(0,0,0,.06); }
+.main h2 { font-size: 14px; margin-bottom: 8px; }
+table.raw { width: 100%; border-collapse: collapse; font-size: 11px; font-family: monospace; }
+table.raw th { text-align: left; padding: 6px 8px; background: #f5f5f5; border-bottom: 2px solid #ddd; white-space: nowrap; position: sticky; top: 52px; z-index: 50; }
+table.raw td { padding: 4px 8px; border-bottom: 1px solid #f0f0f0; max-width: 280px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+table.raw td:hover { white-space: normal; word-break: break-all; }
+.empty { padding: 60px; text-align: center; color: #aaa; }
+.pager { margin-top: 12px; display: flex; gap: 8px; align-items: center; font-size: 12px; color: #666; }
+.pager button { padding: 4px 10px; }
+.aux { margin-top: 24px; }
+.aux summary { cursor: pointer; font-size: 12px; font-weight: 600; color: #555; padding: 6px 0; }
+</style>
+</head>
+<body>
+<script>
+  // raw.html はカラム数が動的なので data-col 属性で金額系列だけマスク。
+  // 日付・ID・description 等は数字を含んでも維持する。
+  window.MF2_MASK_SELECTOR = [
+    'debit','credit','balance','amount','price','total','subtotal',
+    'shipping','discount','points_used','gift_card','quantity','qty',
+    'fee','item_subtotal','order_total','billed_amount','use_amount',
+    'item_price'
+  ].map(c => `table.raw td[data-col="${c}"]`).join(', ');
+</script>
+<!--MF2_MASK_WIDGET-->
+<header>
+  <a href="/ui" style="display:flex;align-items:center;text-decoration:none;color:inherit;align-self:stretch;margin:-10px 10px -10px -16px;padding:0 12px">
+    <span style="font-size:15px;font-weight:800;letter-spacing:-0.5px;line-height:1;white-space:nowrap;user-select:none">Open<span style="color:#7eb3ff">Money</span></span>
+  </a>
+  <h1>📑 生データ</h1>
+  <a href="/ui">💸 支出分類</a>
+  <a href="/invoices">🧾 インボイス管理</a>
+  <a href="/blue_form">📘 青色申告</a>
+  <a href="/settings">⚙ 設定</a>
+</header>
+<div class="page-body">
+<div class="layout">
+  <aside class="sidebar">
+    <h3>サービス</h3>
+    <div id="svc-list"></div>
+  </aside>
+  <main class="main">
+    <div id="content"><div class="empty">サービスを選択してください</div></div>
+  </main>
+</div>
+<script>
+let _services = [];
+let _current = null;
+let _offset = 0;
+const PAGE_SIZE = 200;
+
+async function init() {
+  const r = await fetch('/api/raw/services').then(r => r.json());
+  _services = r.services;
+  const html = _services.map(s => `
+    <div class="svc-item ${s.orphan ? 'orphan' : ''}" data-name="${s.name}" onclick="selectService('${s.name}')">
+      <div>${s.display_name}</div>
+      <div class="svc-meta">${s.row_count} 行 ${s.oldest||''}〜${s.latest||''}</div>
+    </div>`).join('');
+  document.getElementById('svc-list').innerHTML = html;
+  // URL ハッシュから復元
+  const hash = location.hash.replace('#', '');
+  if (hash && _services.find(s => s.name === hash)) selectService(hash);
+}
+
+function selectService(name) {
+  _current = _services.find(s => s.name === name);
+  if (!_current) return;
+  _offset = 0;
+  location.hash = name;
+  document.querySelectorAll('.svc-item').forEach(el => {
+    el.classList.toggle('active', el.dataset.name === name);
+  });
+  loadPage();
+}
+
+async function loadPage() {
+  if (!_current) return;
+  const banks = _current.banks.join(',');
+  const r = await fetch(`/api/raw/transactions?bank=${encodeURIComponent(banks)}&limit=${PAGE_SIZE}&offset=${_offset}`).then(r => r.json());
+  const histLink = _current.history_url
+    ? ` <a href="${_current.history_url}" target="_blank" style="font-size:11px;color:#1976d2;margin-left:8px">🔗 履歴ページ</a>`
+    : '';
+  let html = `<h2>${_current.display_name}${histLink} <span style="font-size:11px;color:#888;margin-left:8px">(${_current.banks.join(' / ')})</span></h2>`;
+  if (r.rows.length === 0) {
+    html += `<div class="empty">データなし</div>`;
+  } else {
+    // detail_url が付いている場合は ↗ 列として表示
+    const showLink = r.rows.some(row => row.detail_url);
+    const cols = r.columns.filter(c => c !== 'detail_url' && (showLink || c !== 'order_id'));
+    html += `<table class="raw"><thead><tr>${
+      (showLink ? '<th></th>' : '')
+    }${cols.map(c => `<th>${c}</th>`).join('')}</tr></thead><tbody>`;
+    html += r.rows.map(row => {
+      const linkCell = showLink
+        ? `<td>${row.detail_url ? `<a href="${row.detail_url}" target="_blank" title="該当ページを開く">↗</a>` : ''}</td>`
+        : '';
+      return `<tr>${linkCell}${cols.map(c => `<td data-col="${c}" title="${(''+(row[c] ?? '')).replace(/"/g,'&quot;')}">${row[c] === null || row[c] === undefined ? '' : row[c]}</td>`).join('')}</tr>`;
+    }).join('');
+    html += '</tbody></table>';
+    html += `<div class="pager">
+      <button onclick="prevPage()" ${_offset === 0 ? 'disabled' : ''}>← 前</button>
+      <span>${_offset + 1}〜${Math.min(_offset + r.rows.length, r.total)} / ${r.total} 行</span>
+      <button onclick="nextPage()" ${_offset + r.rows.length >= r.total ? 'disabled' : ''}>次 →</button>
+    </div>`;
+    // Amazon / Yahoo は補助テーブルも提示
+    if (_current.banks.includes('Amazon')) {
+      html += `<details class="aux"><summary>amazon_order_details (補助テーブル)</summary><div id="aux-aod"></div></details>`;
+      html += `<details class="aux"><summary>amazon_order_items</summary><div id="aux-aoi"></div></details>`;
+    }
+    if (_current.banks.includes('Yahoo!ショッピング')) {
+      html += `<details class="aux"><summary>yahoo_shopping_order_details</summary><div id="aux-ysd"></div></details>`;
+      html += `<details class="aux"><summary>yahoo_shopping_order_items</summary><div id="aux-ysi"></div></details>`;
+    }
+  }
+  document.getElementById('content').innerHTML = html;
+
+  // 補助テーブル lazy load
+  document.querySelectorAll('details.aux').forEach(d => {
+    d.ontoggle = () => { if (d.open) loadAux(d); };
+  });
+}
+
+async function loadAux(detail) {
+  const sum = detail.querySelector('summary').textContent;
+  const tbl = sum.split(' ')[0];
+  const target = detail.querySelector('div');
+  if (target.dataset.loaded) return;
+  const r = await fetch(`/api/raw/aux/${tbl}?limit=200`).then(r => r.json());
+  target.dataset.loaded = '1';
+  if (!r.rows.length) {
+    target.innerHTML = '<div class="empty">空</div>'; return;
+  }
+  target.innerHTML = `<table class="raw"><thead><tr>${r.columns.map(c => `<th>${c}</th>`).join('')}</tr></thead><tbody>${
+    r.rows.map(row => `<tr>${r.columns.map(c => `<td data-col="${c}" title="${(''+row[c]).replace(/"/g,'&quot;')}">${row[c] === null ? '' : row[c]}</td>`).join('')}</tr>`).join('')
+  }</tbody></table>`;
+}
+
+function prevPage() { _offset = Math.max(0, _offset - PAGE_SIZE); loadPage(); }
+function nextPage() { _offset += PAGE_SIZE; loadPage(); }
+
+init();
+</script>
+</div><!-- /.page-body -->
+</body>
+</html>

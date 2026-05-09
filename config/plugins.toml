@@ -1,0 +1,12 @@
+# OpenMoney 有効プラグイン一覧
+# ここに列挙したプラグインのみ `python -m src.plugins_build` でレジストリに含まれる。
+# 空リストまたはこのセクション全体を削除すれば、すべてのプラグインが有効化される。
+
+# enabled = [
+#     "mufg",     # 三菱UFJ銀行
+#     "amazon",   # Amazon / AmazonPay
+#     "rakuten",  # 楽天市場
+# ]
+
+# 全プラグイン有効化（デフォルト）
+# enabled リストを削除したため、discover_dynamic() で見つかるすべてのプラグインが有効化される

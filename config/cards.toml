@@ -1,0 +1,55 @@
+# OpenMoney カード突合マップ共通テンプレート
+# 個人差分は config/cards.local.toml に同形式で書く (各 dict は merge される)
+# 詳細: docs/personal_layer_plan.md
+#
+# 有効プラグイン: mufg / amazon / rakuten
+
+
+# ─────────────────────────────────────────────
+# CARD_KEYWORD_MAP: MUFG 口座振替の description キーワード → カード会社名
+# 用途: src.matching.run_matching() で MUFG 引き落とし行から請求先カードを特定
+# 形式: keyword = "card_bank_name"
+# 個人差分: local で持っているカード会社だけ追加 / defaults を override 可能
+# ─────────────────────────────────────────────
+[CARD_KEYWORD_MAP]
+"ミツイスミトモカ－ド" = "VPASS"
+"オリコ" = "Orico"
+"ミツビシＵＦＪニコス" = "MUFGAmex"
+
+
+# ─────────────────────────────────────────────
+# SHOP_CARD_MAP: ショップ購入 ↔ カード明細の突合パラメータ
+# 用途: src.matching.run_shop_matching()
+# 形式: 各 [SHOP_CARD_MAP."ショップ名"] テーブル
+#   card_banks    = 候補カード会社のリスト
+#   keywords      = カード明細 description に含まれるショップ識別子 (空可)
+#   day_tol       = 日付窓 (購入日 -5 日 〜 +day_tol 日)
+#   amount_tol    = 金額許容率 (0.01 = ±1%)
+# ─────────────────────────────────────────────
+[SHOP_CARD_MAP."楽天市場"]
+card_banks = ["VPASS"]
+keywords = []
+day_tol = 30
+amount_tol = 0.01
+
+[SHOP_CARD_MAP."Amazon"]
+card_banks = ["VPASS", "MUFGAmex"]
+keywords = ["AMAZON", "アマゾン"]
+day_tol = 30
+amount_tol = 0.01
+
+[SHOP_CARD_MAP."AmazonPay"]
+card_banks = ["VPASS", "MUFGAmex", "Orico"]
+keywords = []
+day_tol = 5
+amount_tol = 0.01
+
+
+# ─────────────────────────────────────────────
+# RETURN_KEYWORDS: 返品判定用のショップ識別子 (購入 → カード credit)
+# 用途: src.server.categorize.auto_categorize_returned_purchases()
+# 形式: shop_bank = ["カード明細 description に含まれる識別子", ...]
+# ─────────────────────────────────────────────
+[RETURN_KEYWORDS]
+"Amazon" = ["AMAZON"]
+"楽天市場" = ["RAKUTEN", "ラクテン"]

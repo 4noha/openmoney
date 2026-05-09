@@ -1,0 +1,1357 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>支出分類 · OpenMoney</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-size: 13px; background: #f5f5f5; color: #333; }
+body > header { background: #1a1a2e; color: #fff; padding: 12px 20px; display: flex; align-items: center; gap: 16px; flex-wrap: wrap; position: sticky; top: 0; z-index: 100; }
+body > header h1 { font-size: 16px; font-weight: 600; }
+select, button { font-size: 13px; padding: 5px 10px; border-radius: 4px; border: 1px solid #ccc; cursor: pointer; }
+body > header select { background: #2a2a4e; color: #fff; border-color: #444; }
+.summary { display: flex; gap: 8px; padding: 10px 20px; background: #fff; border-bottom: 1px solid #e0e0e0; flex-wrap: wrap; }
+.summary-card { padding: 6px 14px; border-radius: 20px; cursor: pointer; border: 2px solid transparent; user-select: none; transition: all .15s; }
+.summary-card:hover { filter: brightness(.95); }
+.summary-card.active { border-color: #333; }
+.summary-card .label { font-size: 11px; color: #666; }
+.summary-card .amount { font-weight: 700; font-size: 15px; }
+.summary-card .count { font-size: 11px; color: #888; }
+.sub-filter { padding: 6px 20px; background: #f5f5f5; border-bottom: 1px solid #e0e0e0; display: none; gap: 6px; align-items: center; flex-wrap: wrap; }
+.sub-filter.visible { display: flex; }
+.sub-filter span { font-size: 12px; color: #666; margin-right: 4px; }
+.sub-filter-btn { font-size: 12px; padding: 3px 12px; border-radius: 14px; border: 1px solid #ccc; cursor: pointer; background: #fff; transition: all .15s; }
+.sub-filter-btn:hover { filter: brightness(.95); }
+.sub-filter-btn.active { border-color: #333; font-weight: 600; }
+.cat-未分類 { background: #f0f0f0; }
+.cat-経費 { background: #e3f2fd; }
+.cat-今回は経費 { background: #e3f2fd; }
+.cat-個人支出 { background: #fce4ec; }
+.cat-今回は個人支出 { background: #fce4ec; }
+.cat-出金 { background: #ede7f6; }
+.cat-one-time { background: #f0f4c3; }
+.cat-all { background: #e8eaf6; }
+.toolbar { padding: 8px 20px; background: #fff; border-bottom: 1px solid #e0e0e0; display: flex; gap: 8px; align-items: center; }
+.toolbar span { font-size: 12px; color: #666; }
+.bulk-btn { font-size: 12px; padding: 4px 10px; border-radius: 4px; border: 1px solid #ccc; cursor: pointer; background: #fff; }
+.bulk-btn:hover { background: #f0f0f0; }
+table { width: 100%; border-collapse: collapse; background: #fff; table-layout: fixed; }
+/* チャンク描画中に列幅が再計算されてガクガク動かないよう、各列の幅を固定。
+   td.desc は柔軟に伸ばすので auto に。1024px〜1440px の画面想定。 */
+table col.col-chk    { width: 32px; }
+table col.col-date   { width: 88px; }
+table col.col-bank   { width: 80px; }
+table col.col-desc   { width: auto; }
+table col.col-amt    { width: 120px; }
+/* タグ列: 通常行が 1 行に収まる幅。バッジ多い行は wrap で 2 行になる。 */
+table col.col-tags   { width: 188px; }
+/* カテゴリ列はモード別に幅切替: 支出 6 ボタン / 収入 8 ボタン。
+   8 ボタン分 (家賃収入/副業収入/非課税 等 漢字 4 文字含む) を 1 行に
+   収めるため、収入モードのみボタン padding を詰める + 列幅を拡げる。 */
+table col.col-cat    { width: 360px; }
+body.mode-income table col.col-cat { width: 500px; }
+body.mode-income .cat-btn { padding: 2px 5px; margin-right: 2px; font-size: 10px; }
+td.tag-cell { white-space: normal; line-height: 1.6; }
+td.tag-cell > span, td.tag-cell > a { margin-right: 2px; }
+thead th { position: sticky; top: 56px; background: #fafafa; padding: 8px 10px; text-align: left; font-weight: 600; border-bottom: 2px solid #e0e0e0; white-space: nowrap; z-index: 50; }
+tbody tr:hover { background: #f9f9f9; }
+tbody tr.selected { background: #e8f4fd; }
+td { padding: 6px 10px; border-bottom: 1px solid #f0f0f0; vertical-align: middle; }
+td.amount { text-align: right; font-variant-numeric: tabular-nums; font-weight: 500; }
+td.desc { max-width: 300px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+td.cat-cell { white-space: nowrap; }
+.cat-btn { font-size: 11px; padding: 2px 8px; border-radius: 3px; border: 1px solid transparent; cursor: pointer; margin-right: 3px; }
+.cat-btn:hover { filter: brightness(.9); }
+.cat-btn.active { border-color: #333; font-weight: 700; }
+.cat-btn[data-cat=""] { background: #e8e8e8; }
+.cat-btn[data-cat="経費"] { background: #bbdefb; }
+.cat-btn[data-cat="今回は経費"] { background: #ddeef9; }
+.cat-btn[data-cat="個人支出"] { background: #f48fb1; }
+.cat-btn[data-cat="今回は個人支出"] { background: #f9c4d8; }
+.cat-btn[data-cat="出金"] { background: #ede7f6; }
+#chk-all { cursor: pointer; }
+.loading { text-align: center; padding: 40px; color: #888; }
+.card-cell { white-space: nowrap; }
+.card-badge { display: inline-block; font-size: 11px; padding: 2px 8px; border-radius: 10px; background: #e8f5e9; color: #2e7d32; border: 1px solid #a5d6a7; font-weight: 600; }
+.paid-badge { display: inline-block; font-size: 10px; padding: 1px 6px; border-radius: 8px; background: #e1f5fe; color: #0277bd; border: 1px solid #81d4fa; vertical-align: middle; }
+.car-badge   { display: inline-block; font-size: 10px; padding: 1px 6px; border-radius: 8px; background: #fff3e0; color: #e65100; border: 1px solid #ffcc80; vertical-align: middle; }
+.book-badge  { display: inline-block; font-size: 10px; padding: 1px 6px; border-radius: 8px; background: #f3e5f5; color: #7b1fa2; border: 1px solid #ce93d8; vertical-align: middle; }
+.drink-badge { display: inline-block; font-size: 10px; padding: 1px 6px; border-radius: 8px; background: #fff3e0; color: #e65100; border: 1px solid #ffcc80; vertical-align: middle; }
+.conv-badge  { display: inline-block; font-size: 10px; padding: 1px 6px; border-radius: 8px; background: #e0f7fa; color: #00695c; border: 1px solid #80cbc4; vertical-align: middle; }
+.super-badge  { display: inline-block; font-size: 10px; padding: 1px 6px; border-radius: 8px; background: #f9fbe7; color: #558b2f; border: 1px solid #c5e1a5; vertical-align: middle; }
+.rest-badge   { display: inline-block; font-size: 10px; padding: 1px 6px; border-radius: 8px; background: #fce4ec; color: #c62828; border: 1px solid #f48fb1; vertical-align: middle; }
+.hc-badge     { display: inline-block; font-size: 10px; padding: 1px 6px; border-radius: 8px; background: #efebe9; color: #4e342e; border: 1px solid #bcaaa4; vertical-align: middle; }
+.activity-badge { display: inline-block; font-size: 10px; padding: 1px 6px; border-radius: 8px; background: #e8f5e9; color: #1b5e20; border: 1px solid #a5d6a7; vertical-align: middle; }
+.landlord-badge { display: inline-block; font-size: 10px; padding: 1px 6px; border-radius: 8px; background: #e8eaf6; color: #283593; border: 1px solid #9fa8da; vertical-align: middle; }
+.matched-badge { display: inline-block; font-size: 10px; padding: 1px 6px; border-radius: 8px; background: #e8f5e9; color: #2e7d32; border: 1px solid #a5d6a7; vertical-align: middle; }
+.receipt-badge       { display: inline-block; font-size: 10px; padding: 1px 6px; border-radius: 8px; background: #fff8e1; color: #f57f17; border: 1px solid #ffe082; vertical-align: middle; cursor: pointer; }
+.receipt-badge-empty { display: inline-block; font-size: 10px; padding: 1px 6px; border-radius: 8px; background: transparent; color: #bdbdbd; border: 1px dashed #bdbdbd; vertical-align: middle; cursor: pointer; }
+.invoice-badge { display: inline-block; font-size: 10px; padding: 1px 6px; border-radius: 8px; background: #e8f5e9; color: #2e7d32; border: 1px solid #a5d6a7; vertical-align: middle; text-decoration: none; }
+.invoice-badge-link { display: inline-block; font-size: 10px; padding: 1px 6px; border-radius: 8px; background: #e3f2fd; color: #1565c0; border: 1px solid #90caf9; vertical-align: middle; text-decoration: none; }
+.facility-badge { display: inline-block; font-size: 10px; padding: 1px 6px; border-radius: 8px; background: #fce4ec; color: #880e4f; border: 1px solid #f48fb1; vertical-align: middle; }
+.invest-badge   { display: inline-block; font-size: 10px; padding: 1px 6px; border-radius: 8px; background: #e8f5e9; color: #1b5e20; border: 1px solid #a5d6a7; vertical-align: middle; }
+.medical-badge  { display: inline-block; font-size: 10px; padding: 1px 6px; border-radius: 8px; background: #e3f2fd; color: #0d47a1; border: 1px solid #90caf9; vertical-align: middle; }
+.insurance-badge { display: inline-block; font-size: 10px; padding: 1px 6px; border-radius: 8px; background: #e3f2fd; color: #0d47a1; border: 1px solid #90caf9; vertical-align: middle; }
+.service-badge  { display: inline-block; font-size: 10px; padding: 1px 6px; border-radius: 8px; background: #f3e5f5; color: #6a1b9a; border: 1px solid #ce93d8; vertical-align: middle; }
+.fantasy-badge  { display: inline-block; font-size: 10px; padding: 1px 6px; border-radius: 8px; background: #ede7f6; color: #4527a0; border: 1px solid #b39ddb; vertical-align: middle; }
+.stripe-badge   { display: inline-block; font-size: 10px; padding: 1px 6px; border-radius: 8px; background: #efe9ff; color: #5d3fd3; border: 1px solid #b9a4ff; vertical-align: middle; font-weight: 700; }
+.blank-badge    { display: inline-block; font-size: 10px; padding: 1px 6px; border-radius: 8px; background: #f5f5f5; color: #666; border: 1px solid #ccc; vertical-align: middle; }
+.stripe-lookup-btn { display: inline-flex; align-items: center; margin-left: 4px; font-size: 10px; padding: 2px 8px; border-radius: 10px; background: #635bff; color: #fff; border: 1px solid #5345ff; text-decoration: none; font-weight: 600; vertical-align: -3px; line-height: 1; }
+.stripe-lookup-btn:hover { background: #5345ff; }
+.aliexpress-badge { display: inline-block; font-size: 10px; padding: 1px 6px; border-radius: 8px; background: #fff3e0; color: #d84315; border: 1px solid #ffab91; vertical-align: middle; font-weight: 700; }
+.points-badge   { display: inline-block; font-size: 10px; padding: 1px 6px; border-radius: 8px; background: #fce4ec; color: #c2185b; border: 1px solid #f48fb1; vertical-align: middle; font-weight: 700; }
+.paypay-badge   { display: inline-block; font-size: 10px; padding: 1px 6px; border-radius: 8px; background: #ffebee; color: #c62828; border: 1px solid #ef9a9a; vertical-align: middle; font-weight: 700; }
+.modal-overlay { display:none; position:fixed; inset:0; background:rgba(0,0,0,.5); z-index:1000; align-items:center; justify-content:center; }
+.modal-overlay.open { display:flex; }
+.modal { background:#fff; border-radius:8px; padding:24px; max-width:600px; width:90%; max-height:80vh; overflow-y:auto; }
+.modal h2 { font-size:15px; margin-bottom:12px; }
+.modal-close { float:right; cursor:pointer; font-size:18px; }
+.pdf-modal-overlay { display:none; position:fixed; inset:0; background:rgba(0,0,0,.7); z-index:2000; align-items:center; justify-content:center; }
+.pdf-modal-overlay.open { display:flex; }
+.pdf-modal { background:#fff; border-radius:8px; width:90vw; height:90vh; display:flex; flex-direction:column; overflow:hidden; }
+.pdf-modal-header { display:flex; align-items:center; justify-content:space-between; padding:8px 16px; border-bottom:1px solid #e0e0e0; flex-shrink:0; }
+.pdf-modal-header span { font-size:13px; color:#555; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:70vw; }
+.pdf-modal-header a { font-size:12px; color:#1565c0; text-decoration:none; margin-right:12px; }
+.pdf-modal iframe { flex:1; border:none; width:100%; }
+.receipt-item { border:1px solid #e0e0e0; border-radius:6px; padding:10px; margin-bottom:8px; }
+.receipt-item .r-meta { font-size:11px; color:#888; }
+.receipt-item .r-merchant { font-weight:600; }
+.receipt-item .r-amount { float:right; font-weight:600; }
+.receipt-item .r-links { margin-top:6px; font-size:11px; }
+.unlink-btn { font-size:11px; color:#c62828; background:none; border:none; cursor:pointer; padding:0 4px; }
+.add-link-area { margin-top:12px; }
+.add-link-area select { width:100%; padding:6px; border-radius:4px; border:1px solid #ccc; font-size:12px; }
+.add-link-btn { margin-top:6px; padding:6px 16px; background:#1976d2; color:#fff; border:none; border-radius:4px; cursor:pointer; font-size:12px; }
+.tag-cell      { white-space: nowrap; }
+.amz-detail { font-size: 10px; color: #888; margin-top: 2px; white-space: nowrap; }
+.amz-detail .amz-savings { color: #c0392b; }
+.tag-bar { display: flex; flex-wrap: wrap; gap: 8px; padding: 6px 20px; background: #fff; border-bottom: 1px solid #e0e0e0; align-items: center; }
+.tag-bar span { font-size: 12px; color: #666; }
+.tag-btn { font-size: 12px; padding: 3px 12px; border-radius: 12px; border: 1px solid #ddd; cursor: pointer; background: #fff; }
+.tag-group { display: inline-flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+.tag-btn.active  { background: #ff9800; color: #fff; border-color: #ff9800; }
+.tag-btn.exclude { background: #ef5350; color: #fff; border-color: #ef5350; text-decoration: line-through; }
+.merge-btn { font-size: 12px; padding: 4px 10px; border-radius: 4px; border: 1px solid #ccc; cursor: pointer; background: #fff; }
+.merge-btn.active { background: #43a047; color: #fff; border-color: #43a047; }
+.mode-btn { font-size: 13px; padding: 4px 14px; border-radius: 16px; border: 1px solid #ccc; cursor: pointer; background: #fff; }
+.mode-btn.active { background: #1565c0; color: #fff; border-color: #1565c0; }
+#mobile-toast { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%); background: #323232; color: #fff; padding: 12px 20px; border-radius: 8px; font-size: 13px; line-height: 1.5; z-index: 9999; display: flex; align-items: center; gap: 12px; box-shadow: 0 4px 12px rgba(0,0,0,.3); max-width: 90vw; animation: toast-in .25s ease; }
+#mobile-toast button { flex-shrink: 0; background: #90caf9; color: #000; border: none; border-radius: 4px; padding: 4px 10px; font-size: 12px; cursor: pointer; font-weight: 600; }
+#mobile-toast .close { background: transparent; color: #aaa; font-size: 16px; padding: 0 4px; font-weight: 400; }
+@keyframes toast-in { from { opacity:0; transform: translateX(-50%) translateY(12px); } to { opacity:1; transform: translateX(-50%) translateY(0); } }
+</style>
+</head>
+<body>
+<!--MF2_MASK_WIDGET-->
+<header>
+  <a href="/ui" style="display:flex;align-items:center;text-decoration:none;color:inherit;align-self:stretch;margin:-12px 10px -12px -12px;padding:0 12px">
+    <span style="font-size:15px;font-weight:800;letter-spacing:-0.5px;line-height:1;white-space:nowrap;user-select:none">Open<span style="color:#7eb3ff">Money</span></span>
+  </a>
+  <h1 id="page-title" style="font-size:14px;font-weight:500">💸 支出分類</h1>
+  <div style="display:flex;gap:8px;align-items:center">
+    <button id="mode-expense" class="mode-btn active" onclick="setMode(false)">💸 支出</button>
+    <button id="mode-income"  class="mode-btn"        onclick="setMode(true)">💰 収入</button>
+    <select id="year-sel"><option value="">全期間</option></select>
+    <span id="health-badge" style="font-size:12px;cursor:pointer" title="クリックで詳細"></span>
+    <a href="/invoices" style="color:#aac4ff;font-size:12px;white-space:nowrap">🧾 インボイス管理</a>
+    <a href="/blue_form" style="color:#aac4ff;font-size:12px;white-space:nowrap">📘 青色申告</a>
+    <a href="/raw" style="color:#aac4ff;font-size:12px;white-space:nowrap">📑 生データ</a>
+    <a href="/settings" style="color:#aac4ff;font-size:12px;white-space:nowrap">⚙ 設定</a>
+  </div>
+</header>
+<div class="summary" id="summary"></div>
+<div class="sub-filter" id="sub-filter"></div>
+<div class="tag-bar">
+  <span>タグ:</span>
+  <button class="tag-btn" data-tag="car" onclick="setTag('car')">🚗 クルマ</button>
+  <button class="tag-btn" data-tag="facility" onclick="setTag('facility')">🏬 商業施設</button>
+  <button class="tag-btn" data-tag="invest" onclick="setTag('invest')">💹 投資</button>
+  <button class="tag-btn" data-tag="insurance" onclick="setTag('insurance')">🛡 保険</button>
+  <button class="tag-btn" data-tag="service" onclick="setTag('service')">📱 サービス</button>
+  <button class="tag-btn" data-tag="fantasy" onclick="setTag('fantasy')">🎨 FANTASY</button>
+  <button class="tag-btn" data-tag="book" onclick="setTag('book')">📚 本</button>
+  <button class="tag-btn" data-tag="drink" onclick="setTag('drink')">☕ お茶</button>
+  <button class="tag-btn" data-tag="convenience" onclick="setTag('convenience')">🏪 コンビニ</button>
+  <button class="tag-btn" data-tag="supermarket" onclick="setTag('supermarket')">🛒 スーパー</button>
+  <button class="tag-btn" data-tag="restaurant" onclick="setTag('restaurant')">🍽 飲食店</button>
+  <button class="tag-btn" data-tag="activity" onclick="setTag('activity')">🎡 アクティビティ</button>
+  <button class="tag-btn" data-tag="homecenter" onclick="setTag('homecenter')">🔨 ホームセンター</button>
+  <button class="tag-btn" data-tag="medical" onclick="setTag('medical')">🏥 医療費</button>
+  <button class="tag-btn" data-tag="landlord" onclick="setTag('landlord')">🏠 大家業</button>
+  <span id="user-custom-tags" style="display:contents"></span>
+  <button class="tag-btn" data-tag="blank" onclick="setTag('blank')" title="ジャンルタグが何も付いていない取引">⬜ Blank</button>
+  <span style="color:#ccc">|</span>
+  <button class="tag-btn" data-tag="store:Amazon" onclick="setTag('store:Amazon')">Amazon</button>
+  <button class="tag-btn" data-tag="store:Yahoo!ショッピング" onclick="setTag('store:Yahoo!ショッピング')">Yahoo!</button>
+  <button class="tag-btn" data-tag="store:楽天市場" onclick="setTag('store:楽天市場')">楽天</button>
+  <button class="tag-btn" data-tag="store:ヤフオク購入" onclick="setTag('store:ヤフオク購入')">ヤフオク</button>
+  <button class="tag-btn" data-tag="store:Makuake" onclick="setTag('store:Makuake')">Makuake</button>
+  <button class="tag-btn" data-tag="store:CAMPFIRE" onclick="setTag('store:CAMPFIRE')">CAMPFIRE</button>
+  <button class="tag-btn" data-tag="store:Mercari" onclick="setTag('store:Mercari')">メルカリ</button>
+  <button class="tag-btn" data-tag="store:AliExpress" onclick="setTag('store:AliExpress')">AliExpress</button>
+  <button class="tag-btn" data-tag="store:povo" onclick="setTag('store:povo')">povo</button>
+  <span style="color:#ccc">|</span>
+  <span class="tag-group">
+    <!-- カード = 決済明細が取れる支払い手段 -->
+    <button class="tag-btn" data-tag="card:MUFGAmex" onclick="setTag('card:MUFGAmex')">Amex</button>
+    <button class="tag-btn" data-tag="card:VPASS" onclick="setTag('card:VPASS')">VPASS</button>
+    <button class="tag-btn" data-tag="card:Orico" onclick="setTag('card:Orico')">Orico</button>
+    <button class="tag-btn" data-tag="card:メルカード" onclick="setTag('card:メルカード')">メルカード</button>
+    <button class="tag-btn" data-tag="card:AmazonPay" onclick="setTag('card:AmazonPay')">AmazonPay</button>
+  </span>
+  <span style="color:#ccc">|</span>
+  <span class="tag-group">
+    <!-- 決済明細が取れない / 紙レシート系 -->
+    <button class="tag-btn" data-tag="paypay" onclick="setTag('paypay')">PP PayPay</button>
+    <button class="tag-btn" data-tag="stripe" onclick="setTag('stripe')">💳 Stripe</button>
+  </span>
+  <span style="color:#ccc">|</span>
+  <span class="tag-group">
+    <button class="tag-btn" data-tag="matched_months" onclick="setTag('matched_months')" title="当月・先月を除いた突合可能な月のみ表示">突合完了月</button>
+    <button class="tag-btn" data-tag="matched" onclick="setTag('matched')">突合済み</button>
+    <button class="tag-btn" data-tag="amazon_points_full" onclick="setTag('amazon_points_full')">㌽ ポイント払い</button>
+    <button class="tag-btn" data-tag="返品" onclick="setTag('返品')">↩ 返品</button>
+    <button class="tag-btn" data-tag="receipt" onclick="setTag('receipt')" title="領収書 / レシート (PDF / 画像 / 紙) が紐付いている取引 = 証憑あり">🧾 レシート</button>
+    <button class="tag-btn" data-tag="conflict" onclick="setTag('conflict')" title="同じ取引 (bank+description) が「経費」と「個人支出」両方に分類されている = 仕訳ブレ。 どちらかに統一が必要">⚠ 仕訳ブレ</button>
+    <button class="tag-btn" data-tag="no_receipt" onclick="setTag('no_receipt')" title="経費 (今回は経費) だが レシート/領収書 (receipt) が紐付いていない取引。 確定申告の証憑保存義務に対する警告">📭 レシートなし</button>
+    <button class="tag-btn" type="button" data-tag="no_receipt_vendor_modal" onclick="openNoReceiptVendorModal()" style="background:#fff3e0;color:#e65100" title="レシートなし経費の頻出 vendor をまとめて表示。 適格事業者として登録すると次回から invoice 自動補完される">📊 頻出 vendor</button>
+  </span>
+</div>
+<div class="toolbar">
+  <button class="merge-btn active" id="merge-btn" onclick="toggleMerge()" title="サイト明細と一致するカード明細を非表示">まとめ表示</button>
+  <span id="sel-count" style="margin-left:8px;color:#666">0件選択</span>
+  <span id="bulk-btns"></span>
+</div>
+<table>
+  <colgroup>
+    <col class="col-chk"><col class="col-date"><col class="col-bank">
+    <col class="col-desc"><col class="col-amt"><col class="col-tags">
+    <col class="col-cat">
+  </colgroup>
+  <thead>
+    <tr>
+      <th><input type="checkbox" id="chk-all" onchange="toggleAll(this.checked)"></th>
+      <th>日付</th><th>サービス</th><th>内容</th><th style="text-align:right" id="amt-header">支出</th><th>タグ</th><th>カテゴリ</th>
+    </tr>
+  </thead>
+  <tbody id="tbody"><tr><td colspan="7" class="loading">読み込み中...</td></tr></tbody>
+</table>
+
+<div class="modal-overlay" id="modal-overlay" onclick="if(event.target===this)closeModal()">
+  <div class="modal">
+    <div id="modal-body"></div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="meta-modal-overlay" style="z-index:1500"
+     onclick="if(event.target===this)closeMetaForm()">
+  <div class="modal" style="max-width:520px">
+    <span class="modal-close" onclick="closeMetaForm()">✕</span>
+    <h2>📝 メタレシート登録</h2>
+    <div id="meta-form-context" style="font-size:12px;color:#666;background:#f5f5f5;padding:8px;border-radius:4px;margin-bottom:12px"></div>
+    <div style="display:flex;flex-direction:column;gap:10px">
+      <label style="font-size:12px">
+        <div style="margin-bottom:4px;color:#555">事業者名 (= 適格請求書発行事業者の正式名称) <span style="color:#c62828">*</span></div>
+        <input id="meta-form-merchant" type="text" placeholder="例: 株式会社浪速管理"
+               style="width:100%;padding:6px 8px;border:1px solid #ccc;border-radius:4px;font-size:13px">
+      </label>
+      <label style="font-size:12px">
+        <div style="margin-bottom:4px;color:#555">適格請求書登録番号 T... (任意、 後で追加可)</div>
+        <input id="meta-form-invoice" type="text" placeholder="T1234567890123"
+               style="width:100%;padding:6px 8px;border:1px solid #ccc;border-radius:4px;font-size:13px">
+      </label>
+      <label style="font-size:12px">
+        <div style="margin-bottom:4px;color:#555">キーワードで広く適用 (任意、 表記揺れ吸収)</div>
+        <input id="meta-form-keyword" type="text" placeholder="例: ジョイフル本田 (= ラクテンペイ*ジヨイフルホンダ や ジョイフル本田 荒川沖店/iD などをまとめて適用)"
+               style="width:100%;padding:6px 8px;border:1px solid #ccc;border-radius:4px;font-size:13px">
+        <div style="margin-top:3px;color:#888;font-size:11px">
+          description_normalized にこの文字列を含む全経費 tx に link されます。 短すぎると関係ない取引にも適用されるので注意。
+        </div>
+      </label>
+      <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:8px">
+        <button class="merge-btn" onclick="closeMetaForm()" style="background:#eee">キャンセル</button>
+        <button class="add-link-btn" onclick="submitMetaForm()" style="background:#1976d2;color:#fff;border-color:#1976d2">登録</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="pdf-modal-overlay" id="pdf-modal-overlay" onclick="if(event.target===this)closePdfModal()">
+  <div class="pdf-modal">
+    <div class="pdf-modal-header">
+      <span id="pdf-modal-title"></span>
+      <div style="display:flex;align-items:center;gap:8px;flex-shrink:0">
+        <a id="pdf-modal-link" href="#" target="_blank">新しいタブで開く ↗</a>
+        <span style="cursor:pointer;font-size:20px;line-height:1" onclick="closePdfModal()">✕</span>
+      </div>
+    </div>
+    <iframe id="pdf-modal-frame" src=""></iframe>
+  </div>
+</div>
+
+<script>
+const EXPENSE_CATS = ['', '経費', '今回は経費', '個人支出', '今回は個人支出', '出金'];
+const INCOME_CATS  = ['', '給与', '家賃収入', '副業収入', '売上', '返金', '保険金', '非課税'];
+const CAT_LABEL = {
+  '': '未分類',
+  '経費': '経費', '今回は経費': '今回のみ',
+  '個人支出': '個人支出', '今回は個人支出': '今回のみ',
+  '出金': '出金',
+  '給与': '給与', '家賃収入': '家賃収入', '副業収入': '副業収入', '売上': '売上', '返金': '返金', '保険金': '保険金',
+  '非課税': '非課税',
+};
+let currentYear = '', currentCat = '__all__', activeTags = new Set(), excludeTags = new Set(), mergeMode = true, incomeMode = false;
+function cats() { return incomeMode ? INCOME_CATS : EXPENSE_CATS; }
+let txs = [], selected = new Set();
+
+function saveState() {
+  const p = new URLSearchParams();
+  if (currentYear) p.set('year', currentYear);
+  if (currentCat !== '__all__') p.set('cat', currentCat);
+  if (activeTags.size) p.set('tags', [...activeTags].join(','));
+  if (excludeTags.size) p.set('excl', [...excludeTags].join(','));
+  if (!mergeMode) p.set('merge', '0');
+  if (incomeMode) p.set('income', '1');
+  const qs = p.toString();
+  history.replaceState(null, '', qs ? '?' + qs : location.pathname);
+}
+
+async function applyUserTagsToBar() {
+  try {
+    const u = await fetch('/api/user-tags').then(r => r.json());
+    const disabled = new Set(u.disabled || []);
+    // 不使用タグの tag-btn を hide
+    disabled.forEach(id => {
+      document.querySelectorAll(`.tag-btn[data-tag="${id}"]`).forEach(b => b.style.display = 'none');
+    });
+    // カスタムタグの tag-btn を user-custom-tags 領域に挿入
+    const slot = document.getElementById('user-custom-tags');
+    if (slot && u.custom) {
+      slot.innerHTML = u.custom
+        .filter(c => !disabled.has(c.id))
+        .map(c => `<button class="tag-btn" data-tag="${c.id}" onclick="setTag('${c.id.replace(/'/g, "\\'")}')">🏷 ${(c.label || c.id).replace(/[<>]/g,'')}</button>`)
+        .join('');
+    }
+  } catch (e) {
+    console.warn('user-tags load failed:', e);
+  }
+}
+
+async function init() {
+  // ユーザタグ設定 (使用/不使用 + カスタム) を tag-bar に反映
+  await applyUserTagsToBar();
+
+  const years = await fetch('/api/years').then(r => r.json());
+  const sel = document.getElementById('year-sel');
+  years.forEach(y => sel.innerHTML += `<option value="${y}">${y}年</option>`);
+
+  // URL から状態を復元
+  const p = new URLSearchParams(location.search);
+  if (p.get('income') === '1') {
+    incomeMode = true;
+    document.getElementById('mode-expense').classList.remove('active');
+    document.getElementById('mode-income').classList.add('active');
+    document.getElementById('page-title').textContent = '💰 収入分類';
+    document.getElementById('amt-header').textContent = '収入';
+    document.getElementById('merge-btn').style.display = 'none';
+    document.body.classList.add('mode-income');
+  }
+  if (p.get('merge') === '0') {
+    mergeMode = false;
+    document.getElementById('merge-btn').classList.remove('active');
+  }
+  currentYear = p.has('year') ? p.get('year') : (years[0] || '');
+  sel.value = currentYear;
+  if (p.has('cat')) currentCat = p.get('cat');
+  if (p.has('tags')) p.get('tags').split(',').filter(Boolean).forEach(t => activeTags.add(t));
+  if (p.has('excl')) p.get('excl').split(',').filter(Boolean).forEach(t => excludeTags.add(t));
+  document.querySelectorAll('.tag-btn').forEach(b => {
+    b.classList.toggle('active',  activeTags.has(b.dataset.tag));
+    b.classList.toggle('exclude', excludeTags.has(b.dataset.tag));
+  });
+
+  sel.onchange = () => { currentYear = sel.value; currentCat = '__all__'; selected.clear(); saveState(); load(); };
+  renderBulkBtns();
+  load();
+}
+
+async function load() {
+  await Promise.all([loadSummary(), loadTxs(), loadHealth()]);
+}
+
+async function loadHealth() {
+  try {
+    const res = await fetch('/api/health').then(r => r.json());
+    const badge = document.getElementById('health-badge');
+    if (!badge) return;
+    const issues = Object.entries(res).filter(([k, v]) => k !== 'ok' && v.count !== undefined && v.count > 0);
+    const stale = (res.data_freshness?.stale_scrape_14d) || [];
+    if (res.ok && stale.length === 0) {
+      badge.style.color = '#9eff9e';
+      badge.textContent = '✓';
+      badge.title = '全データ整合性 OK / 全スクレイパー 14日以内に実行済';
+      badge.onclick = () => {
+        const lines = ['整合性: OK', '', 'スクレイプ最新性:'];
+        (res.data_freshness?.all || []).forEach(f => {
+          const s = f.scrape_days_ago == null ? '未実行' : `${f.scrape_days_ago}日前`;
+          lines.push(`  ${f.bank}: データ${f.data_days_ago}日前 / scrape ${s}`);
+        });
+        alert(lines.join('\n'));
+      };
+    } else {
+      badge.style.color = '#ffd86b';
+      const totalCnt = issues.length + stale.length;
+      badge.textContent = `⚠ ${totalCnt}`;
+      const tt = [];
+      if (issues.length) tt.push('整合性: ' + issues.map(([k, v]) => `${k}=${v.count}`).join(', '));
+      if (stale.length) tt.push('未スクレイプ: ' + stale.map(s => s.bank).join(', '));
+      badge.title = tt.join('\n');
+      badge.onclick = () => {
+        const lines = [];
+        if (issues.length) {
+          lines.push('=== 整合性問題 ===');
+          for (const [k, v] of issues) {
+            lines.push(`${k}: ${v.count} 件`);
+            (v.sample || []).slice(0, 2).forEach(s => lines.push('  ' + JSON.stringify(s)));
+          }
+          lines.push('');
+        }
+        if (stale.length) {
+          lines.push('=== スクレイプ未実行/14日超 ===');
+          stale.forEach(s => {
+            const sd = s.scrape_days_ago == null ? '未実行' : `${s.scrape_days_ago}日前`;
+            lines.push(`  ${s.bank}: scrape ${sd} (データ ${s.data_days_ago}日前)`);
+          });
+        }
+        alert(lines.join('\n'));
+      };
+    }
+  } catch (e) {
+    // health 取得失敗は静かに無視
+  }
+}
+
+// 連続クリック時の loadSummary 再計算スパムを抑える debouncer。
+// 最後の操作から 1 秒経ってから 1 度だけ /api/summary を叩く。
+let _summaryDebounceTimer = null;
+function loadSummaryDebounced(delay = 1000) {
+  if (_summaryDebounceTimer) clearTimeout(_summaryDebounceTimer);
+  _summaryDebounceTimer = setTimeout(() => {
+    _summaryDebounceTimer = null;
+    loadSummary();
+  }, delay);
+}
+
+async function loadSummary() {
+  const data = await fetch(`/api/summary?year=${currentYear}&merge=${mergeMode}&tags=${[...activeTags].join(',')}&exclude_tags=${[...excludeTags].join(',')}&income=${incomeMode}`).then(r => r.json());
+  // 出金（銀行→カード引き落とし等）は合計から除外（カード明細で既計上）
+  const total = Object.entries(data).filter(([k]) => k !== '出金').reduce((s, [, v]) => s + (v.total || 0), 0);
+  const totalCnt = Object.entries(data).filter(([k]) => k !== '出金').reduce((s, [, v]) => s + (v.cnt || 0), 0);
+  // 経費・個人支出は今回は系と合算して表示
+  const _expenseTotal = (data['経費']?.total||0) + (data['今回は経費']?.total||0);
+  const _expenseCnt   = (data['経費']?.cnt  ||0) + (data['今回は経費']?.cnt  ||0);
+  const _personalTotal = (data['個人支出']?.total||0) + (data['今回は個人支出']?.total||0);
+  const _personalCnt   = (data['個人支出']?.cnt  ||0) + (data['今回は個人支出']?.cnt  ||0);
+  const _expAct  = ['__経費_all__','経費','今回は経費'].includes(currentCat) ? 'active' : '';
+  const _persAct = ['__個人支出_all__','個人支出','今回は個人支出'].includes(currentCat) ? 'active' : '';
+
+  let html = `<div class="summary-card cat-all ${currentCat === '__all__' ? 'active' : ''}" onclick="setCat('__all__')">
+    <div class="label">合計</div>
+    <div class="amount">¥${total.toLocaleString()}</div>
+    <div class="count">${totalCnt}件</div></div>`;
+  html += `<div class="summary-card cat-未分類 ${currentCat==='' ? 'active' : ''}" onclick="setCat('')">
+    <div class="label">未分類</div>
+    <div class="amount">¥${(data['']?.total||0).toLocaleString()}</div>
+    <div class="count">${data['']?.cnt||0}件</div></div>`;
+  // 支出モード時のみ表示するサマリ（経費 / 個人支出 / 出金）。
+  // 収入モードでこれを出すとカードが増えすぎて行レイアウトが折返し崩れる。
+  if (!incomeMode) {
+    html += `<div class="summary-card cat-経費 ${_expAct}" onclick="setCat('__経費_all__')">
+      <div class="label">経費</div>
+      <div class="amount">¥${_expenseTotal.toLocaleString()}</div>
+      <div class="count">${_expenseCnt}件</div></div>`;
+    html += `<div class="summary-card cat-個人支出 ${_persAct}" onclick="setCat('__個人支出_all__')">
+      <div class="label">個人支出</div>
+      <div class="amount">¥${_personalTotal.toLocaleString()}</div>
+      <div class="count">${_personalCnt}件</div></div>`;
+    html += `<div class="summary-card cat-出金 ${currentCat==='出金' ? 'active' : ''}" onclick="setCat('出金')">
+      <div class="label">出金</div>
+      <div class="amount">¥${(data['出金']?.total||0).toLocaleString()}</div>
+      <div class="count">${data['出金']?.cnt||0}件</div></div>`;
+  }
+  if (incomeMode) {
+    // ¥0 の収入カテゴリ（家賃収入・副業収入が無い等）はカード非表示にして
+    // 行レイアウトを崩さない。currentCat で active なものは ¥0 でも残す。
+    // 「非課税」は常に表示 (フィルタ用に存在感を示す)。
+    const ALWAYS_SHOW = new Set(['非課税']);
+    INCOME_CATS.filter(c => c).forEach(c => {
+      const d = data[c] || {cnt:0, total:0};
+      if (d.cnt === 0 && d.total === 0 && currentCat !== c && !ALWAYS_SHOW.has(c)) return;
+      html += `<div class="summary-card cat-${c} ${currentCat===c?'active':''}" onclick="setCat('${c}')">
+        <div class="label">${CAT_LABEL[c]}</div>
+        <div class="amount">¥${d.total.toLocaleString()}</div>
+        <div class="count">${d.cnt}件</div></div>`;
+    });
+  }
+  document.getElementById('summary').innerHTML = html;
+  renderSubFilter();
+}
+
+function renderSubFilter() {
+  const el = document.getElementById('sub-filter');
+  const _経費グループ = ['__経費_all__','経費','今回は経費'];
+  const _個人支出グループ = ['__個人支出_all__','個人支出','今回は個人支出'];
+  if (_経費グループ.includes(currentCat)) {
+    el.className = 'sub-filter visible';
+    el.innerHTML = `<span>経費:</span>
+      <button class="sub-filter-btn ${currentCat==='__経費_all__'?'active':''}" onclick="setCat('__経費_all__')">全て</button>
+      <button class="sub-filter-btn cat-経費 ${currentCat==='経費'?'active':''}" onclick="setCat('経費')">必ず経費</button>
+      <button class="sub-filter-btn cat-今回は経費 ${currentCat==='今回は経費'?'active':''}" onclick="setCat('今回は経費')">今回のみ</button>`;
+  } else if (_個人支出グループ.includes(currentCat)) {
+    el.className = 'sub-filter visible';
+    el.innerHTML = `<span>個人支出:</span>
+      <button class="sub-filter-btn ${currentCat==='__個人支出_all__'?'active':''}" onclick="setCat('__個人支出_all__')">全て</button>
+      <button class="sub-filter-btn cat-個人支出 ${currentCat==='個人支出'?'active':''}" onclick="setCat('個人支出')">必ず個人支出</button>
+      <button class="sub-filter-btn cat-今回は個人支出 ${currentCat==='今回は個人支出'?'active':''}" onclick="setCat('今回は個人支出')">今回のみ</button>`;
+  } else {
+    el.className = 'sub-filter';
+    el.innerHTML = '';
+  }
+}
+
+async function loadTxs() {
+  document.getElementById('tbody').innerHTML = '<tr><td colspan="7" class="loading">読み込み中...</td></tr>';
+  txs = await fetch(`/api/transactions?year=${currentYear}&category=${encodeURIComponent(currentCat)}&merge=${mergeMode}&tags=${[...activeTags].join(',')}&exclude_tags=${[...excludeTags].join(',')}&income=${incomeMode}`).then(r => r.json());
+  selected.clear();
+  renderTxs();
+}
+
+const PASTEL = ['#fce4ec','#e8f5e9','#e3f2fd','#fff8e1','#f3e5f5','#e0f2f1','#fbe9e7','#e8eaf6'];
+
+function buildOrderColorMap(txList) {
+  const map = {};
+  let idx = 0;
+  txList.forEach(t => {
+    const m = (t.description || '').match(/^\[([^/\]]+)\/\d+\]/);
+    if (m && !map[m[1]]) map[m[1]] = PASTEL[idx++ % PASTEL.length];
+  });
+  return map;
+}
+
+// Kindle シリーズのグループ折り畳み状態（true: 展開）
+const expandedSeries = new Set();
+function toggleSeriesGroup(key) {
+  if (expandedSeries.has(key)) expandedSeries.delete(key);
+  else expandedSeries.add(key);
+  renderTxs();
+}
+
+function renderTxs() {
+  const tbody = document.getElementById('tbody');
+  if (!txs.length) { tbody.innerHTML = '<tr><td colspan="7" class="loading">データなし</td></tr>'; return; }
+  const orderColorMap = buildOrderColorMap(txs);
+
+  // Kindle シリーズの集計: series_group が同じ行を集計
+  const seriesAgg = {};
+  for (const t of txs) {
+    if (!t.series_group) continue;
+    if (!seriesAgg[t.series_group]) {
+      seriesAgg[t.series_group] = { count: 0, total: 0, ids: [], first: t };
+    }
+    seriesAgg[t.series_group].count += 1;
+    seriesAgg[t.series_group].total += (t.debit || 0);
+    seriesAgg[t.series_group].ids.push(t.id);
+  }
+
+  // 1件しかないグループはグループ化しない（折り畳む意味がない）
+  const groupedKeys = new Set(Object.keys(seriesAgg).filter(k => seriesAgg[k].count >= 2));
+
+  const html = [];
+  const seenGroups = new Set();
+  for (const t of txs) {
+    if (t.series_group && groupedKeys.has(t.series_group)) {
+      const key = t.series_group;
+      const isExpanded = expandedSeries.has(key);
+      if (!seenGroups.has(key)) {
+        // ヘッダー行: 子と同じバッジセット（タグ・カード・レシート・PDF）を表示
+        seenGroups.add(key);
+        const agg = seriesAgg[key];
+        const baseTitle = key.split('::').slice(1).join('::');
+        const arrow = isExpanded ? '▼' : '▶';
+        const orderMatch = (t.description || '').match(/^\[([^/\]]+)\/\d+\]/);
+        const rowBg = orderMatch ? `background:${orderColorMap[orderMatch[1]]}` : '';
+        const tags = t.tags || [];
+        const tagBadges = [
+          tags.includes('car')         ? '<span class="car-badge" data-tag="car">🚗 クルマ</span>'   : '',
+          tags.includes('book')        ? '<span class="book-badge" data-tag="book">📚 本</span>'      : '',
+          tags.includes('drink')       ? '<span class="drink-badge" data-tag="drink">☕ お茶</span>'    : '',
+          tags.includes('convenience') ? '<span class="conv-badge" data-tag="convenience">🏪 コンビニ</span>' : '',
+          tags.includes('supermarket') ? '<span class="super-badge" data-tag="supermarket">🛒 スーパー</span>': '',
+          tags.includes('restaurant')  ? '<span class="rest-badge" data-tag="restaurant">🍽 飲食店</span>'  : '',
+          tags.includes('activity')    ? '<span class="activity-badge" data-tag="activity">🎡 アクティビティ</span>' : '',
+          tags.includes('homecenter')  ? '<span class="hc-badge" data-tag="homecenter">🔨 ホームセンター</span>' : '',
+          tags.includes('landlord')    ? '<span class="landlord-badge" data-tag="landlord">🏠 大家業</span>'   : '',
+          tags.includes('facility')    ? '<span class="facility-badge" data-tag="facility">🏬 商業施設</span>' : '',
+          tags.includes('invest')      ? '<span class="invest-badge" data-tag="invest">💹 投資</span>'      : '',
+          tags.includes('insurance')   ? '<span class="insurance-badge" data-tag="insurance">🛡 保険</span>'   : '',
+          tags.includes('medical')     ? '<span class="medical-badge" data-tag="medical">🏥 医療費</span>'   : '',
+          tags.includes('service')     ? '<span class="service-badge" data-tag="service">📱 サービス</span>' : '',
+          tags.includes('stripe')      ? '<span class="stripe-badge" data-tag="stripe">💳 Stripe</span>'   : '',
+          // 'blank' タグはフィルタ専用 (バッジ非表示)
+          t.paid_via                   ? `<span class="paid-badge">💳 ${esc(t.paid_via)}</span>` : '',
+        ].filter(Boolean).join(' ');
+        // PDF 領収書バッジ（Amazon の親 order_id ベース）
+        const orderIdM = (t.description || '').match(/^\[([^/\]]+)/);
+        const orderId = orderIdM ? orderIdM[1] : null;
+        const invoiceBadge = (t.has_invoice && orderId)
+          ? `<span class="invoice-badge" title="領収書PDF" style="cursor:pointer" onclick="event.stopPropagation();openPdfModal('/api/amazon-invoice/${orderId}','${esc(baseTitle)}')">📄</span>`
+          : '';
+        // 紙レシートバッジ
+        const _receiptClick = `openReceiptModal(${t.id},'${esc(baseTitle)}');event.stopPropagation()`;
+        const receiptBadge = t.receipt_ids
+          ? `<span class="receipt-badge" title="レシートを見る" onclick="${_receiptClick}">🧾</span>`
+          : '';
+        const cardBadge = t.card_bank ? `<span class="card-badge">${esc(t.card_bank)}</span>` : '';
+        html.push(`<tr class="series-header" style="${rowBg};cursor:pointer;font-weight:500" onclick="toggleSeriesGroup('${key.replace(/'/g, "\\'")}')">
+          <td></td>
+          <td>${t.date}</td>
+          <td class="bank">${t.bank}</td>
+          <td class="desc">${arrow} ${esc(baseTitle)} <span style="color:#888;font-size:11px">${agg.count}冊</span></td>
+          <td class="amount">¥${Number(agg.total).toLocaleString()}</td>
+          <td class="tag-cell">${tagBadges} ${cardBadge} ${invoiceBadge} ${receiptBadge}</td>
+          <td></td>
+        </tr>`);
+      }
+      if (!isExpanded) continue;
+    }
+    html.push(renderTxRow(t, orderColorMap));
+    // receipt_items が 2 件以上ある tx は内訳折りたたみ行を追加
+    const items = t.receipt_items || [];
+    if (items.length >= 2) {
+      const grpKey = `txitems-${t.id}`;
+      const isOpen = expandedSeries.has(grpKey);
+      // 親行の末尾に展開トグルボタンを後付け (= 直前の renderTxRow の最初の <tr> を改修)
+      // 簡略化: 別の行 (= ▶ row) を追加 + 各 item を子行として追加
+      html.push(`<tr class="series-header" data-grp="${grpKey}" style="cursor:pointer;background:#fafafa;font-size:11px" onclick="toggleSeriesGroup('${grpKey}')">
+        <td></td>
+        <td colspan="6" style="padding:4px 10px;color:#666">
+          <span style="display:inline-block;width:14px">${isOpen ? '▼' : '▶'}</span>
+          📑 内訳 ${items.length} 件
+          <span style="color:#888;margin-left:8px">${items.map(it => esc(it.label || '')).filter(s => s).slice(0, 5).join(' / ')}${items.length > 5 ? ' ...' : ''}</span>
+        </td>
+      </tr>`);
+      if (isOpen) {
+        for (const it of items) {
+          html.push(`<tr style="background:#fcfcfc;font-size:11px;color:#555">
+            <td></td>
+            <td></td>
+            <td></td>
+            <td style="padding-left:32px">↳ ${esc(it.label || '')}${it.merchant ? ` <span style="color:#999;font-size:10px">${esc(it.merchant)}</span>` : ''}${it.invoice_number ? ` <span style="color:#2e7d32;font-size:10px">${esc(it.invoice_number)}</span>` : ''}</td>
+            <td class="amount">¥${Number(it.amount || 0).toLocaleString()}</td>
+            <td></td>
+            <td></td>
+          </tr>`);
+        }
+      }
+    }
+  }
+  // チャンク分割描画: 先頭 INIT_CHUNK 行を同期で出して即時表示、
+  // 残りは rAF で 100 行ずつ追加してビューポート外を裏で埋める。
+  const INIT_CHUNK = 50;
+  const BG_CHUNK = 100;
+  if (html.length <= INIT_CHUNK) {
+    tbody.innerHTML = html.join('');
+  } else {
+    tbody.innerHTML = html.slice(0, INIT_CHUNK).join('');
+    let next = INIT_CHUNK;
+    const myToken = (renderTxs._token = (renderTxs._token || 0) + 1);
+    function appendChunk() {
+      // 別の renderTxs が走ったらこのチャンクは破棄
+      if (renderTxs._token !== myToken) return;
+      if (next >= html.length) return;
+      const slice = html.slice(next, next + BG_CHUNK).join('');
+      tbody.insertAdjacentHTML('beforeend', slice);
+      next += BG_CHUNK;
+      requestAnimationFrame(appendChunk);
+    }
+    requestAnimationFrame(appendChunk);
+  }
+  updateSelCount();
+}
+
+function renderTxRow(t, orderColorMap) {
+    const chk = selected.has(t.id) ? 'checked' : '';
+    const rowCls = selected.has(t.id) ? 'selected' : '';
+    const orderMatch = (t.description || '').match(/^\[([^/\]]+)\/\d+\]/);
+    const rowBg = orderMatch ? `background:${orderColorMap[orderMatch[1]]}` : '';
+    // tx_meta.lock_source あり = plugin によるカテゴリロック。 ボタン disabled
+    // (= クリックしても 423 で拒否される)。 解除は /settings の plugin トグル。
+    const isLocked = !!t.locked_by;
+    const lockTitle = isLocked
+      ? `🔒 ${t.locked_by} plugin が「${t.category}」 で固定中。 解除は /settings`
+      : '';
+    const catBtns = cats().map(c =>
+      `<button class="cat-btn ${t.category===c?'active':''}" data-cat="${c}"`
+      + (isLocked ? ` disabled style="opacity:.5;cursor:not-allowed" title="${lockTitle}"` : ` onclick="setcat(${t.id},'${c}',this)"`)
+      + `>${CAT_LABEL[c]}</button>`
+    ).join('') + (isLocked ? `<span style="font-size:10px;color:#888;margin-left:4px" title="${lockTitle}">🔒 ${t.locked_by}</span>` : '');
+    const tags = t.tags || [];
+    const _SHOP_BANKS = new Set(['Amazon','Yahoo!ショッピング','楽天市場','ヤフオク購入','ヤフオク売上','Makuake','CAMPFIRE','Mercari','Mercari売上']);
+    const _receiptClick = `openReceiptModal(${t.id},dispDesc(txs.find(x=>x.id===${t.id})?.description||''));event.stopPropagation()`;
+    const receiptBadge = t.receipt_ids
+      ? `<span class="receipt-badge" title="レシートを見る" onclick="${_receiptClick}">🧾</span>`
+      : (!t.has_invoice && _SHOP_BANKS.has(t.bank) && t.bank !== 'Amazon')
+        ? `<span class="receipt-badge-empty" title="レシートを紐付け" onclick="${_receiptClick}">🧾</span>`
+        : '';
+    const invoiceTxId = (() => {
+      const m = (t.description || '').match(/^\[([^/\]]+)/);
+      return m ? m[1] : null;
+    })();
+    const _INVOICE_ENDPOINTS = {
+      amazon: 'amazon-invoice',
+      mercari: 'mercari-invoice',
+      yahoo_shopping: 'yahoo-shopping-invoice',
+      rakuten: 'rakuten-invoice',
+      campfire: 'campfire-invoice',
+      aliexpress: 'aliexpress-invoice',
+      yahuoku: 'yahuoku-invoice',
+    };
+    const invoiceUrl = t.has_invoice
+      ? (t.invoice_type === 'yahuoku'
+          ? `/api/yahuoku-invoice/${t.id}`
+          : (invoiceTxId && _INVOICE_ENDPOINTS[t.invoice_type]
+              ? `/api/${_INVOICE_ENDPOINTS[t.invoice_type]}/${invoiceTxId}`
+              : null))
+      : null;
+    // CAMPFIRE は 支援詳細(detail) と システム利用料(fee) の2種類
+    const isCampfire = t.invoice_type === 'campfire' && t.has_invoice && invoiceTxId;
+    const invoiceBadge = isCampfire
+      ? `<span class="invoice-badge" title="支援詳細（商品代証憑）" style="cursor:pointer" onclick="event.stopPropagation();openPdfModal('/api/campfire-invoice/${invoiceTxId}?kind=detail','支援詳細: '+dispDesc(txs.find(x=>x.id===${t.id})?.description||''))">📄</span>`
+      + `<span class="invoice-badge" title="システム利用料領収書" style="cursor:pointer;margin-left:2px" onclick="event.stopPropagation();openPdfModal('/api/campfire-invoice/${invoiceTxId}?kind=fee','システム利用料: '+dispDesc(txs.find(x=>x.id===${t.id})?.description||''))">🧾</span>`
+      : invoiceUrl
+        ? `<span class="invoice-badge" title="領収書PDF" style="cursor:pointer" onclick="event.stopPropagation();openPdfModal('${invoiceUrl}',dispDesc(txs.find(x=>x.id===${t.id})?.description||''))">📄</span>`
+        : (t.bank === 'Amazon' && invoiceTxId)
+          ? `<a class="invoice-badge-link" href="https://www.amazon.co.jp/gp/your-account/order-details?orderID=${invoiceTxId}" target="_blank" title="Amazon注文詳細" onclick="event.stopPropagation()">🔗</a>`
+          : '';
+    const tagBadges = [
+      tags.includes('car')          ? '<span class="car-badge" data-tag="car">🚗 クルマ</span>'   : '',
+      tags.includes('book')         ? '<span class="book-badge" data-tag="book">📚 本</span>'      : '',
+      tags.includes('drink')        ? '<span class="drink-badge" data-tag="drink">☕ お茶</span>'     : '',
+      tags.includes('convenience')  ? '<span class="conv-badge" data-tag="convenience">🏪 コンビニ</span>' : '',
+      tags.includes('supermarket')  ? '<span class="super-badge" data-tag="supermarket">🛒 スーパー</span>' : '',
+      tags.includes('restaurant')   ? '<span class="rest-badge" data-tag="restaurant">🍽 飲食店</span>'   : '',
+      tags.includes('activity')     ? '<span class="activity-badge" data-tag="activity">🎡 アクティビティ</span>' : '',
+      tags.includes('homecenter')   ? '<span class="hc-badge" data-tag="homecenter">🔨 ホームセンター</span>' : '',
+      tags.includes('landlord')     ? '<span class="landlord-badge" data-tag="landlord">🏠 大家業</span>'    : '',
+      tags.includes('facility')     ? '<span class="facility-badge" data-tag="facility">🏬 商業施設</span>'  : '',
+      tags.includes('invest')       ? '<span class="invest-badge" data-tag="invest">💹 投資</span>'        : '',
+      tags.includes('insurance')    ? '<span class="insurance-badge" data-tag="insurance">🛡 保険</span>'    : '',
+      tags.includes('medical')      ? '<span class="medical-badge" data-tag="medical">🏥 医療費</span>'    : '',
+      tags.includes('service')      ? '<span class="service-badge" data-tag="service">📱 サービス</span>'  : '',
+      tags.includes('stripe')       ? '<span class="stripe-badge" data-tag="stripe">💳 Stripe</span>'    : '',
+      tags.includes('fantasy')      ? '<span class="fantasy-badge" data-tag="fantasy">🎨 FANTASY</span>'  : '',
+      // 'blank' タグはフィルタ専用で行内バッジは表示しない (要望)
+      tags.includes('store:AliExpress') ? '<span class="aliexpress-badge" data-tag="store:AliExpress">🛒 AliExpress</span>'  : '',
+      tags.includes('amazon_points_full') ? '<span class="points-badge" title="ポイント全額決済">㌽</span>' : '',
+      tags.includes('paypay')              ? '<span class="paypay-badge" title="PayPay残高">PP</span>' : '',
+      t.card_bank                   ? `<span class="card-badge">${esc(t.card_bank)}</span>` : '',
+      t.paid_via                    ? `<span class="paid-badge">💳 ${esc(t.paid_via)}</span>` : '',
+      invoiceBadge,
+      receiptBadge,
+    ].filter(Boolean).join(' ');
+    const fmt = n => (n||0).toLocaleString();
+    let amzDetail = '';
+    // 数量明細: description 末尾の " ×N" を読んで単価 × 個数を組み立てる
+    const qtyMatch = (t.description || '').match(/\s×(\d+)$/);
+    let qtyLine = '';
+    if (qtyMatch) {
+      const qty = parseInt(qtyMatch[1], 10);
+      const baseAmount = (t.bank === 'Amazon' && t.item_subtotal > 0)
+        ? t.item_subtotal      // Amazon: 小計（item subtotal）から単価を出す
+        : (t.debit || 0);      // それ以外: 親 debit から単価を出す
+      const unitPrice = Math.round(baseAmount / qty);
+      qtyLine = `単価 ¥${fmt(unitPrice)} × ${qty}個`;
+    }
+    if (t.bank === 'Amazon' && t.item_subtotal > 0) {
+      const parts = [`小計 ¥${fmt(t.item_subtotal)}`];
+      if (t.shipping) parts.push(`送料 ¥${fmt(t.shipping)}`);
+      if (t.discount)     parts.push(`割引 -¥${fmt(t.discount)}`);
+      if (t.points_used)  parts.push(`P -¥${fmt(t.points_used)}`);
+      if (t.gift_card)    parts.push(`GC -¥${fmt(t.gift_card)}`);
+      const lines = [parts.join(' / ')];
+      if (qtyLine) lines.push(qtyLine);
+      amzDetail = `<div class="amz-detail">${lines.join('<br>')}</div>`;
+    } else if (qtyLine) {
+      amzDetail = `<div class="amz-detail">${qtyLine}</div>`;
+    }
+    const displayDebit = incomeMode ? (t.credit||0) : (t.debit||0);
+    let feeDetail = '';
+    if (!incomeMode && t.matched_card_amount && t.matched_card_amount !== t.debit) {
+      const fee = t.matched_card_amount - t.debit;
+      if (fee < 0) {
+        const label = t.bank === 'ヤフオク購入' ? '落札額'
+                    : t.bank === 'Yahoo!ショッピング' ? '商品代'
+                    : t.bank === 'CAMPFIRE' ? '支援' : '商品代';
+        feeDetail = `<div class="amz-detail">${label} ¥${fmt(t.debit)} / PayPay残高 ¥${fmt(-fee)}</div>`;
+      } else {
+        // shop < card: 差額は送料／手数料（バンクごとに表記を切り替え）
+        if (t.bank === 'ヤフオク購入') {
+          feeDetail = `<div class="amz-detail">落札額 ¥${fmt(t.debit)} / 送料 ¥${fmt(fee)}</div>`;
+        } else if (t.bank === 'Yahoo!ショッピング') {
+          feeDetail = `<div class="amz-detail">商品代 ¥${fmt(t.debit)} / 送料 ¥${fmt(fee)}</div>`;
+        } else {
+          feeDetail = `<div class="amz-detail">支援 ¥${fmt(t.debit)} / 手数料 ¥${fmt(fee)}</div>`;
+        }
+      }
+    } else if (!incomeMode && t.bank === 'ヤフオク購入' && !t.matched_card_amount && t.debit > 0) {
+      feeDetail = `<div class="amz-detail">PayPay残高 ¥${fmt(t.debit)}</div>`;
+    } else if (!incomeMode && t.bank === 'Yahoo!ショッピング'
+               && !t.matched_card_amount && !t.card_bank && !t.paid_via && t.debit > 0) {
+      feeDetail = `<div class="amz-detail">PayPay残高 ¥${fmt(t.debit)}</div>`;
+    }
+    const displayAmount = (!incomeMode && t.matched_card_amount) ? t.matched_card_amount : displayDebit;
+    const stripeBtn = tags.includes('stripe')
+      ? ` <a href="https://support.stripe.com/charge-lookup" target="_blank" rel="noopener"
+            class="stripe-lookup-btn" title="Stripe charge lookup でマーチャント特定"
+            onclick="event.stopPropagation()">🔍 調査</a>`
+      : '';
+    const _tagAttr = tags && tags.length ? ` data-tags="|${tags.map(esc).join('|')}|"` : '';
+    return `<tr class="${rowCls}" id="row-${t.id}" style="${rowBg}"${_tagAttr}>
+      <td><input type="checkbox" ${chk} onchange="toggleSel(${t.id},this.checked)"></td>
+      <td>${t.date}</td>
+      <td class="bank">${t.bank}</td>
+      <td class="desc" title="${esc(dispDesc(t.description))}">${esc(dispDesc(t.description))}${stripeBtn}</td>
+      <td class="amount">¥${displayAmount.toLocaleString()}${amzDetail}${feeDetail}</td>
+      <td class="tag-cell">${tagBadges}</td>
+      <td class="cat-cell">${catBtns}</td>
+    </tr>`;
+}
+// renderTxs() 末尾処理
+function _afterRenderTxs() {
+  updateSelCount();
+}
+
+function esc(s) { return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+function dispDesc(s) {
+  // [oid/N] プレフィックスと末尾の " ×N" 数量サフィックスを除去
+  return (s||'')
+    .replace(/^\[[A-Za-z0-9_-]+(\/[^\]]+)?\]\s*/,'')
+    .replace(/\s*×\d+$/, '');
+}
+
+function setCat(c) { currentCat = c; selected.clear(); saveState(); renderSubFilter(); load(); }
+
+// AND が排他になるタグ群: ショップ (store:*) とジャンル (車・本…)。
+// 1 つを AND にすると 0.4 秒後に同群の他の AND は解除される (誤クリックの猶予)。
+// card:* は別仕様 (グループ内 OR / 複数選択可) なのでここに含めない。
+const _EXCLUSIVE_AND_TAGS = new Set([
+  // ショップサイト
+  'store:Amazon','store:Yahoo!ショッピング','store:楽天市場',
+  'store:ヤフオク購入','store:ヤフオク売上','store:Makuake',
+  'store:CAMPFIRE','store:Mercari','store:Mercari売上',
+  'store:AliExpress',
+  // ジャンル (UI tag-bar 1段目)
+  'car','facility','invest','insurance','service','fantasy','book','drink',
+  'convenience','supermarket','restaurant','activity','homecenter','medical',
+  'landlord',
+  'blank',  // Blank も同群: 他ジャンル AND 中に Blank 押すと他は解除される
+  // 'stripe' は決済識別メタタグなのでジャンル排他には含めない
+]);
+let _shopAndTimer = null;
+
+function setTag(t) {
+  const wasActive = activeTags.has(t);
+  if (activeTags.has(t)) { activeTags.delete(t); excludeTags.add(t); }
+  else if (excludeTags.has(t)) { excludeTags.delete(t); }
+  else { activeTags.add(t); }
+  document.querySelectorAll('.tag-btn').forEach(b => {
+    b.classList.toggle('active',  activeTags.has(b.dataset.tag));
+    b.classList.toggle('exclude', excludeTags.has(b.dataset.tag));
+  });
+  selected.clear();
+  saveState();
+  load();
+
+  // ショップ系・ジャンル系はAND条件で排他 (0.4秒後に同群の他 AND を解除)
+  if (_EXCLUSIVE_AND_TAGS.has(t)) {
+    if (activeTags.has(t)) {
+      // neutral→AND: タイマー開始
+      if (_shopAndTimer) clearTimeout(_shopAndTimer);
+      _shopAndTimer = setTimeout(() => {
+        _shopAndTimer = null;
+        let changed = false;
+        for (const st of _EXCLUSIVE_AND_TAGS) {
+          if (st !== t && activeTags.has(st)) { activeTags.delete(st); changed = true; }
+        }
+        if (changed) {
+          document.querySelectorAll('.tag-btn').forEach(b => {
+            b.classList.toggle('active',  activeTags.has(b.dataset.tag));
+            b.classList.toggle('exclude', excludeTags.has(b.dataset.tag));
+          });
+          saveState();
+          load();
+        }
+      }, 400);
+    } else if (wasActive) {
+      // AND→NOT-AND: タイマーをキャンセル
+      if (_shopAndTimer) { clearTimeout(_shopAndTimer); _shopAndTimer = null; }
+    }
+  }
+}
+
+const BULK_COLORS = {'経費':'#e3f2fd','今回は経費':'#e3f2fd','個人支出':'#fce4ec','今回は個人支出':'#fce4ec','出金':'#ede7f6',
+                     '給与':'#e8f5e9','家賃収入':'#e8eaf6','副業収入':'#fff8e1','売上':'#fce4ec','返金':'#e0f2f1','保険金':'#f3e5f5',
+                     '非課税':'#fff9c4'};
+function renderBulkBtns() {
+  const html = cats().map(c => {
+    const bg = c ? ` style="background:${BULK_COLORS[c]||'#fff'}"` : '';
+    return `<button class="bulk-btn" onclick="smartSet('${c}')"${bg}>${CAT_LABEL[c]}</button>`;
+  }).join('');
+  document.getElementById('bulk-btns').innerHTML = html;
+}
+
+function setMode(income) {
+  incomeMode = income;
+  document.getElementById('mode-expense').classList.toggle('active', !income);
+  document.getElementById('mode-income').classList.toggle('active', income);
+  document.getElementById('page-title').textContent = income ? '💰 収入分類' : '💸 支出分類';
+  document.getElementById('amt-header').textContent = income ? '収入' : '支出';
+  document.getElementById('merge-btn').style.display = income ? 'none' : '';
+  document.body.classList.toggle('mode-income', income);
+  currentCat = '__all__';
+  activeTags.clear(); excludeTags.clear();
+  document.querySelectorAll('.tag-btn').forEach(b => { b.classList.remove('active','exclude'); });
+  renderBulkBtns();
+  selected.clear();
+  saveState();
+  load();
+}
+
+function toggleMerge() {
+  mergeMode = !mergeMode;
+  document.getElementById('merge-btn').classList.toggle('active', mergeMode);
+  selected.clear();
+  saveState();
+  load();
+}
+
+async function setcat(id, cat, btn) {
+  await fetch(`/api/transactions/${id}/category`, {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({category: cat})});
+  const tx = txs.find(t => t.id === id);
+  if (tx) tx.category = cat;
+  const row = document.getElementById('row-' + id);
+  row.querySelectorAll('.cat-btn').forEach(b => b.classList.toggle('active', b.dataset.cat === cat));
+  loadSummaryDebounced();
+}
+
+function toggleSel(id, checked) {
+  if (checked) selected.add(id); else selected.delete(id);
+  const row = document.getElementById('row-' + id);
+  if (row) row.className = checked ? 'selected' : '';
+  updateSelCount();
+}
+
+function toggleAll(checked) {
+  txs.forEach(t => { if (checked) selected.add(t.id); else selected.delete(t.id); });
+  renderTxs();
+  if (checked) txs.forEach(t => { const r = document.getElementById('row-'+t.id); if(r) r.className='selected'; });
+}
+
+function updateSelCount() {
+  document.getElementById('sel-count').textContent = selected.size + '件選択';
+  document.getElementById('chk-all').indeterminate = selected.size > 0 && selected.size < txs.length;
+  document.getElementById('chk-all').checked = selected.size === txs.length && txs.length > 0;
+}
+
+async function smartSet(cat) {
+  if (!txs.length) return;
+  const label = CAT_LABEL[cat] || cat || '未分類';
+  let ids;
+  if (selected.size > 0) {
+    ids = [...selected];
+  } else {
+    if (!confirm(`表示中の ${txs.length} 件を全て「${label}」に変更しますか？`)) return;
+    ids = txs.map(t => t.id);
+  }
+  await fetch('/api/transactions/bulk-category', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ids, category: cat})});
+  ids.forEach(id => { const tx = txs.find(t => t.id===id); if(tx) tx.category=cat; });
+  renderTxs();
+  loadSummaryDebounced();
+}
+
+let modalTxId = null;
+let allReceipts = [];
+
+async function openReceiptModal(txId, txDesc) {
+  modalTxId = txId;
+  if (!allReceipts.length) {
+    allReceipts = await fetch('/api/receipts').then(r => r.json());
+  }
+  const linked = await fetch(`/api/transactions/${txId}/receipts`).then(r => r.json());
+  const linkedIds = new Set(linked.map(r => r.id));
+  const unlinked = allReceipts.filter(r => !linkedIds.has(r.id));
+
+  let html = `<span class="modal-close" onclick="closeModal()">✕</span>
+    <h2>🧾 レシート管理 — ${esc(txDesc)}</h2>`;
+
+  if (linked.length === 0) {
+    html += '<p style="color:#888;font-size:12px">紐付きレシートなし</p>';
+  } else {
+    html += linked.map(r => {
+      const items = r.items || [];
+      let breakdownHtml = '';
+      if (items.length > 1) {
+        const sumItems = items.reduce((a, x) => a + (x.amount||0), 0);
+        const matched = sumItems === r.amount;
+        breakdownHtml = `
+          <div style="margin-top:8px;border-top:1px dashed #ddd;padding-top:6px;font-size:11px">
+            <div style="color:#666;margin-bottom:4px">📑 内訳 (${items.length} 件、 合計 ¥${sumItems.toLocaleString()}${matched ? ' ✓' : ' ⚠'})</div>
+            ${items.map(it => `
+              <div style="display:grid;grid-template-columns:1fr auto auto;gap:6px;padding:2px 0;align-items:center">
+                <div>
+                  <div>${esc(it.label||'')}</div>
+                  <div style="color:#888;font-size:10px">${esc(it.merchant||'(事業者未登録)')} ${it.invoice_number ? '<span style="color:#2e7d32">'+esc(it.invoice_number)+'</span>' : '<span style="color:#c62828">未取得</span>'}</div>
+                </div>
+                <div style="text-align:right;white-space:nowrap">¥${(it.amount||0).toLocaleString()}</div>
+              </div>`).join('')}
+          </div>`;
+      }
+      const isMetaOnly = !r.filename;
+      const imageBlock = isMetaOnly
+        ? `<div style="margin-top:6px;padding:6px;background:#fff3e0;color:#e65100;font-size:11px;border-radius:4px">📝 メタのみ (PDF/画像なし)</div>`
+        : `<div style="margin-top:8px;text-align:center">
+             <img src="/api/receipts/${r.id}/image" style="max-width:100%;max-height:400px;border-radius:6px;border:1px solid #e0e0e0;cursor:pointer"
+                  onclick="window.open('/api/receipts/${r.id}/image','_blank')" title="クリックで拡大">
+           </div>`;
+      return `
+      <div class="receipt-item">
+        <span class="r-amount">¥${(r.amount||0).toLocaleString()}</span>
+        <div class="r-merchant">${esc(r.merchant||r.filename||'')}</div>
+        <div class="r-meta">${r.receipt_date||''} ${r.invoice_number ? '<span style="color:#2e7d32;font-size:10px">'+esc(r.invoice_number)+'</span>' : ''}</div>
+        ${imageBlock}
+        ${breakdownHtml}
+        <div class="r-links">
+          <button class="unlink-btn" onclick="unlinkReceipt(${r.id},${txId})">🗑 リンク解除</button>
+        </div>
+      </div>`;
+    }).join('');
+  }
+
+  html += `<div class="add-link-area">
+    <div style="font-size:12px;font-weight:600;margin-bottom:4px">レシートを追加リンク</div>
+    <select id="receipt-sel">
+      <option value="">-- レシートを選択 --</option>
+      ${unlinked.map(r => `<option value="${r.id}">[${r.receipt_date||'日付不明'}] ${esc(r.merchant||r.filename)} ¥${(r.amount||0).toLocaleString()}</option>`).join('')}
+    </select>
+    <button class="add-link-btn" onclick="linkReceipt(${txId})">リンクする</button>
+  </div>
+  <div class="add-link-area" style="border-top:1px solid #eee;margin-top:12px;padding-top:12px">
+    <div style="font-size:12px;font-weight:600;margin-bottom:6px">📝 インボイス情報を付ける (PDF なし、 メタのみ)</div>
+    <div style="font-size:11px;color:#888;margin-bottom:6px">
+      レシート PDF を撮らない / 撮れないサブスク決済 等で、 事業者名と適格請求書番号 (T...) だけ
+      明細に紐付ける。 インボイス管理側に自動反映される。
+    </div>
+    <input id="inv-merchant" type="text" placeholder="事業者名 (例: 株式会社 ジョイフル本田)"
+           style="width:100%;padding:6px;border:1px solid #ccc;border-radius:4px;font-size:13px;margin-bottom:4px">
+    <input id="inv-number" type="text" placeholder="適格請求書番号 T..."
+           style="width:100%;padding:6px;border:1px solid #ccc;border-radius:4px;font-size:13px;margin-bottom:4px">
+    <input id="inv-date" type="date"
+           style="width:100%;padding:6px;border:1px solid #ccc;border-radius:4px;font-size:13px;margin-bottom:6px">
+    <button class="add-link-btn" onclick="attachInvoiceMeta(${txId})">インボイス情報を保存</button>
+  </div>`;
+
+  document.getElementById('modal-body').innerHTML = html;
+  document.getElementById('modal-overlay').classList.add('open');
+}
+
+// 日本語マッチング用ヘルパ。 小文字カタカナ → 大文字、 NFKC、 記号除去で正規化。
+// (例:「ジョイフル」 → 「ジヨイフル」 で「ラクテンペイ*ジヨイフルホンダ」 とマッチ)
+function _normJa(s) {
+  if (!s) return '';
+  s = s.normalize('NFKC');
+  const small = 'ァィゥェォャュョッヮ';
+  const big   = 'アイウエオヤユヨツワ';
+  let out = '';
+  for (const c of s) {
+    const i = small.indexOf(c);
+    out += i >= 0 ? big[i] : c;
+  }
+  return out.replace(/[・\-\s]/g, '').toLowerCase();
+}
+// vendor 名から検索 token を抽出 (= カタカナ連続 3+ 文字、 漢字連続 2+ 文字、
+// ただし「株式会社」 等の法人格語は除外)。
+const _LEGAL_FORMS = ['株式会社', '合同会社', '有限会社', '一般社団法人', '財団法人',
+                       '公益財団法人', '公益社団法人', '医療法人', '宗教法人'];
+function _extractTokens(s) {
+  s = _normJa(s);
+  const tokens = [];
+  for (const m of s.matchAll(/[ァ-ヴー]{3,}/g)) tokens.push(m[0]);
+  for (const m of s.matchAll(/[一-龯]{2,}/g)) {
+    if (!_LEGAL_FORMS.includes(m[0])) tokens.push(m[0]);
+  }
+  return tokens;
+}
+
+async function attachMetaFromNoReceiptVendor(idx) {
+  const v = (window._noReceiptVendors || [])[idx];
+  if (!v || !v.sample_tx_id) return;
+  window._metaFormContext = v;
+  // 既存 invoice_vendors から description_normalized と部分一致 (= 正規化後 token
+  // ベース) で候補抽出。 「ジョイフル本田」 と「ジヨイフルホンダ」 のような
+  // カタカナ仮名違いも吸収する。
+  const vendors = await fetch('/api/tax/vendors').then(r => r.json()).catch(() => []);
+  const descNorm = _normJa(v.description_normalized || '');
+  const candidates = (vendors || []).filter(iv => {
+    const sn = (iv.service_name || '').trim();
+    const cn = (iv.company_name || '').trim();
+    if (!sn && !cn) return false;
+    const tokens = [..._extractTokens(sn), ..._extractTokens(cn)];
+    return tokens.some(tok => descNorm.includes(tok));
+  });
+  let candidateHtml = '';
+  if (candidates.length) {
+    candidateHtml = '<div style="margin-bottom:8px;padding:6px;background:#e3f2fd;border-radius:4px;font-size:11px">' +
+      '<div style="margin-bottom:4px;color:#1976d2;font-weight:600">既存事業者 候補 (クリックで採用):</div>' +
+      candidates.map((iv, i) => {
+        const co = iv.company_name || iv.service_name;
+        const inv = iv.invoice_number || '(空)';
+        return `<div style="padding:3px 0;cursor:pointer;color:#0d47a1" onclick="adoptVendorCandidate(${i})">→ ${esc(co)} / ${esc(inv)}</div>`;
+      }).join('') + '</div>';
+    window._metaFormCandidates = candidates;
+  } else {
+    window._metaFormCandidates = [];
+  }
+  document.getElementById('meta-form-context').innerHTML =
+    `<b>${esc(v.bank)}</b> / ${esc(v.description_normalized)}<br>` +
+    `件数: ${v.count} / 合計: ¥${v.total.toLocaleString()}<br>` +
+    `<span style="color:#1976d2">※ 同 (bank, description) の全 ${v.count} 件に 1:N で自動適用</span>` +
+    candidateHtml;
+  document.getElementById('meta-form-merchant').value = v.description_normalized || '';
+  document.getElementById('meta-form-invoice').value = v.matched_invoice || '';
+  document.getElementById('meta-form-keyword').value = '';
+  document.getElementById('meta-modal-overlay').classList.add('open');
+  // フォーカスを merchant に + Enter で submit
+  setTimeout(() => document.getElementById('meta-form-merchant').focus(), 50);
+  for (const id of ['meta-form-merchant', 'meta-form-invoice', 'meta-form-keyword']) {
+    const el = document.getElementById(id);
+    el.onkeydown = (e) => {
+      if (e.key === 'Enter') { e.preventDefault(); submitMetaForm(); }
+      else if (e.key === 'Escape') { closeMetaForm(); }
+    };
+  }
+}
+
+function adoptVendorCandidate(idx) {
+  const cand = (window._metaFormCandidates || [])[idx];
+  if (!cand) return;
+  const co = cand.company_name || cand.service_name || '';
+  document.getElementById('meta-form-merchant').value = co;
+  document.getElementById('meta-form-invoice').value = cand.invoice_number || '';
+}
+
+function closeMetaForm() {
+  document.getElementById('meta-modal-overlay').classList.remove('open');
+  window._metaFormContext = null;
+}
+
+function _normalizeInvoice(raw) {
+  // ブラウザ側の事前正規化 (= 半角化、 ハイフン/空白除去、 大文字化、 T 補完)。
+  // 不正値は null を返す。 サーバ側でも検証されるので最後の砦は API。
+  if (!raw) return '';
+  let s = (raw || '').normalize('NFKC').trim().replace(/[-\s]/g, '').toUpperCase();
+  if (/^\d{13}$/.test(s)) return 'T' + s;
+  if (/^T\d{13}$/.test(s)) return s;
+  return null;
+}
+
+async function submitMetaForm() {
+  const v = window._metaFormContext;
+  if (!v) return;
+  const merchant = document.getElementById('meta-form-merchant').value.trim();
+  const invRaw = document.getElementById('meta-form-invoice').value.trim();
+  if (!merchant) {
+    alert('事業者名は必須です');
+    return;
+  }
+  let inv;
+  if (invRaw) {
+    inv = _normalizeInvoice(invRaw);
+    if (inv === null) {
+      alert('適格請求書登録番号の形式が不正です。\n\n期待: T + 13 桁数字 (例: T1234567890123)\nもしくは 13 桁数字 (T を自動補完)');
+      return;
+    }
+    // T 自動補完が走った場合は確認
+    if (inv !== invRaw) {
+      const ok = confirm(`登録番号を以下に正規化します:\n\n  入力: ${invRaw}\n  保存: ${inv}\n\nこれで登録しますか?`);
+      if (!ok) return;
+    }
+  } else {
+    inv = '';
+  }
+  const keyword = document.getElementById('meta-form-keyword').value.trim();
+  const res = await fetch(`/api/transactions/${v.sample_tx_id}/invoice-meta`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      merchant: merchant,
+      invoice_number: inv,
+      apply_to_all_same_desc: true,
+      apply_to_keyword: keyword,
+    }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    alert('登録失敗: ' + (err.detail || res.status));
+    return;
+  }
+  const r = await res.json();
+  closeMetaForm();
+  // 親 modal 再描画 (= 登録状況更新) + 一覧 reload
+  await openNoReceiptVendorModal();
+  await load();
+  console.log(`メタレシート登録: receipt_id=${r.receipt_id} / 適用 tx 数=${r.linked_count}`);
+}
+
+async function attachInvoiceMeta(txId) {
+  const merchant = document.getElementById('inv-merchant').value.trim();
+  const number = document.getElementById('inv-number').value.trim();
+  const date = document.getElementById('inv-date').value;
+  if (!merchant && !number) {
+    alert('事業者名 か 適格請求書番号 のどちらかは入力してください');
+    return;
+  }
+  const res = await fetch(`/api/transactions/${txId}/invoice-meta`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      merchant: merchant,
+      invoice_number: number,
+      receipt_date: date,
+    }),
+  });
+  if (!res.ok) {
+    alert('保存失敗: ' + res.status);
+    return;
+  }
+  // cache invalidate されているので reload で最新化
+  await load();
+  await openModal(txId);
+}
+
+function closeModal() {
+  document.getElementById('modal-overlay').classList.remove('open');
+  modalTxId = null;
+}
+
+async function openNoReceiptVendorModal() {
+  const yearParam = currentYear ? `?year=${currentYear}` : '';
+  const list = await fetch('/api/no-receipt/vendors' + yearParam).then(r => r.json());
+  const yearLabel = currentYear || '全期間';
+  const totalCount = list.reduce((a, x) => a + x.count, 0);
+  const totalAmount = list.reduce((a, x) => a + x.total, 0);
+
+  const rows = list.map((v, idx) => {
+    const hasInvoice = !!v.matched_invoice;
+    const hasVendor = !!v.vendor_id;
+    const badgeStyle = hasInvoice ? 'background:#e8f5e9;color:#2e7d32'
+                       : hasVendor ? 'background:#fff3e0;color:#e65100'
+                       : 'background:#ffebee;color:#c62828';
+    const badge = hasInvoice ? `T${v.matched_invoice}` : (hasVendor ? '名のみ登録' : '未登録');
+    return `
+      <tr>
+        <td style="white-space:nowrap;color:#666;font-size:11px">${esc(v.bank)}</td>
+        <td style="font-size:12px">${esc(v.description_normalized)}</td>
+        <td style="text-align:right;white-space:nowrap">${v.count} 件</td>
+        <td style="text-align:right;white-space:nowrap">¥${v.total.toLocaleString()}</td>
+        <td style="white-space:nowrap"><span style="${badgeStyle};border-radius:3px;padding:2px 6px;font-size:10px">${esc(badge)}</span></td>
+        <td style="white-space:nowrap;text-align:right">
+          <button class="add-link-btn" style="font-size:11px;padding:3px 8px"
+                  onclick="attachMetaFromNoReceiptVendor(${idx})"
+                  ${v.sample_tx_id ? '' : 'disabled'}>📝 メタ付与</button>
+        </td>
+      </tr>`;
+  }).join('');
+
+  window._noReceiptVendors = list;
+  const html = `
+    <span class="modal-close" onclick="closeModal()">✕</span>
+    <h2>📊 レシートなし 経費 — 頻出 vendor (${yearLabel})</h2>
+    <p style="color:#666;font-size:12px;margin:8px 0">
+      レシート/領収書が紐付いていない経費の中で <b>2 件以上</b> 出現する取引先を集計。
+      「📝 メタ付与」 で 適格事業者名 + 登録番号を入力すると、 同 (bank+description) の
+      全経費 tx に <b>1:N で自動適用</b>。 /tax 側のテーブルには直接書き込まず、
+      明細にメタレシート (= filename=NULL の receipts エントリ) を付ける形 (= 疎結合維持)。
+    </p>
+    <p style="color:#888;font-size:12px;margin:0 0 12px">合計: <b>${totalCount} 件 / ¥${totalAmount.toLocaleString()}</b></p>
+    <table style="width:100%;border-collapse:collapse;font-size:12px">
+      <thead>
+        <tr style="border-bottom:1px solid #ddd;background:#fafafa">
+          <th style="text-align:left;padding:6px 8px">bank</th>
+          <th style="text-align:left;padding:6px 8px">description</th>
+          <th style="text-align:right;padding:6px 8px">件数</th>
+          <th style="text-align:right;padding:6px 8px">合計</th>
+          <th style="text-align:left;padding:6px 8px">登録状況</th>
+          <th style="text-align:right;padding:6px 8px">操作</th>
+        </tr>
+      </thead>
+      <tbody>${rows || '<tr><td colspan="6" style="text-align:center;padding:24px;color:#999">該当 vendor なし</td></tr>'}</tbody>
+    </table>`;
+  document.getElementById('modal-body').innerHTML = html;
+  document.getElementById('modal-overlay').classList.add('open');
+}
+
+let _pdfBlobUrl = null;
+async function openPdfModal(url, title) {
+  document.getElementById('pdf-modal-title').textContent = title || '';
+  document.getElementById('pdf-modal-link').href = url;
+  document.getElementById('pdf-modal-frame').src = '';
+  document.getElementById('pdf-modal-overlay').classList.add('open');
+  const blob = await fetch(url).then(r => r.blob());
+  if (_pdfBlobUrl) URL.revokeObjectURL(_pdfBlobUrl);
+  _pdfBlobUrl = URL.createObjectURL(blob);
+  document.getElementById('pdf-modal-frame').src = _pdfBlobUrl;
+}
+function closePdfModal() {
+  document.getElementById('pdf-modal-overlay').classList.remove('open');
+  document.getElementById('pdf-modal-frame').src = '';
+  if (_pdfBlobUrl) { URL.revokeObjectURL(_pdfBlobUrl); _pdfBlobUrl = null; }
+}
+document.addEventListener('keydown', e => { if (e.key === 'Escape') { closeModal(); closePdfModal(); } });
+
+async function unlinkReceipt(receiptId, txId) {
+  await fetch(`/api/receipts/${receiptId}/link/${txId}`, {method:'DELETE'});
+  allReceipts = [];
+  openReceiptModal(txId, dispDesc(txs.find(t => t.id === txId)?.description || ''));
+  loadTxs();
+}
+
+async function linkReceipt(txId) {
+  const sel = document.getElementById('receipt-sel');
+  const receiptId = parseInt(sel.value);
+  if (!receiptId) return;
+  await fetch(`/api/receipts/${receiptId}/link/${txId}`, {method:'POST'});
+  allReceipts = [];
+  openReceiptModal(txId, dispDesc(txs.find(t => t.id === txId)?.description || ''));
+  loadTxs();
+}
+
+// モバイルブラウザ検知 → PCモード案内トーストを1セッション1回表示
+(function() {
+  const isMobile = /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent) || window.innerWidth < 768;
+  if (!isMobile || sessionStorage.getItem('mobile-toast-shown')) return;
+  sessionStorage.setItem('mobile-toast-shown', '1');
+  const el = document.createElement('div');
+  el.id = 'mobile-toast';
+  el.innerHTML = `
+    <span>スマートフォンからご利用中です。<br>ブラウザの「PCサイト」モードに切り替えると見やすくなります。</span>
+    <button onclick="document.getElementById('mobile-toast').remove()">閉じる</button>
+  `;
+  document.body.appendChild(el);
+  setTimeout(() => el.remove(), 12000);
+})();
+
+init();
+</script>
+</body>
+</html>

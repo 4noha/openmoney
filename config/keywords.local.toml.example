@@ -1,0 +1,32 @@
+# 個人差分テンプレート — このファイルを `keywords.local.toml` にコピーして編集する。
+# .gitignore で `config/*.local.toml` を除外しているので main にはコミットされない。
+# 自分の個人 branch で `keywords.local.toml` をトラックしておくと、main への
+# rebase / merge 時にもコンフリクトせず差分だけ維持できる。
+#
+# 各 [CATEGORY].keywords は config/keywords.toml の defaults と **concat** される。
+# つまりテンプレートのキーワードは消さず、自分の追加分だけ書けば良い。
+
+# 例: 通っているガソリンスタンドや駐車場
+[CAR]
+keywords = [
+    # "セルフつちうら",       # 土浦のセルフ給油
+    # "ペトラス",             # 浦和美園のペトラス
+]
+
+# 例: 自分の蔵書 / 推し作品
+[BOOK]
+keywords = [
+    # "アルティマニア",
+    # "天体戦士サンレッド",
+]
+
+# 例: 個人の購読・支援先
+[FANTASY]
+keywords = [
+    # "ピクシブ",            # FANBOX 月額支援
+]
+
+# STORE_TAGS: ショップ識別キーワードの追加
+# (defaults と同名キーは local が上書きする)
+[STORE_TAGS]
+# "MyShop" = ["MYSHOP", "マイショップ"]

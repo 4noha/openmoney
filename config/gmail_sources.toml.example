@@ -1,0 +1,20 @@
+# Gmail 経由で明細を取得する送信者リスト (= テンプレート、 main 共有)。
+# 個人差分は config/gmail_sources.local.toml に書く (= .gitignore 対象)。
+#
+# 各 source 行:
+#   name        : 取り込み時の bank 識別子 (= 'Gmail:楽天カード' のように prefix される)
+#   from        : 送信者メールアドレスの完全/部分一致
+#   subject     : Subject に含まれるキーワード (任意、 空ならすべて対象)
+#   parser_hint : LLM プロンプトに渡すパースヒント (= サービス名 + 抽出方針)
+
+[[source]]
+name = "楽天カード"
+from = "info@mail.rakuten-card.co.jp"
+subject = "カードご利用のお知らせ"
+parser_hint = "楽天カードのご利用通知メール。 利用日・金額・店名を抽出。"
+
+[[source]]
+name = "Amazon"
+from = "auto-confirm@amazon.co.jp"
+subject = "ご注文ありがとうございました"
+parser_hint = "Amazon 注文確認メール。 注文番号 / 注文日 / 合計金額 / 商品名を抽出。"

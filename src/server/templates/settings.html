@@ -1,0 +1,981 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>設定 · OpenMoney</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-size: 13px; background: #f5f5f5; color: #333; }
+body > header { background: #1a1a2e; color: #fff; padding: 10px 16px; display: flex; align-items: center; gap: 16px; position: sticky; top: 0; z-index: 100; }
+table thead th { position: sticky; top: 0; background: #fafafa; z-index: 5; }
+body > header h1 { font-size: 14px; font-weight: 500; margin: 0; color: #fff; }
+body > header a { color: #aac4ff; text-decoration: none; font-size: 12px; }
+.page-body { padding: 24px; }
+h1 { font-size: 18px; margin-bottom: 16px; }
+h2 { font-size: 14px; margin: 0 0 8px; color: #555; }
+.card { background: #fff; padding: 18px; border-radius: 8px; margin-bottom: 16px; max-width: 720px; box-shadow: 0 1px 3px rgba(0,0,0,.06); scroll-margin-top: 16px; }
+/* 2 カラムレイアウト: 左 = sticky TOC、右 = 既存カード列 */
+.layout { display: grid; grid-template-columns: 200px minmax(0, 720px); gap: 24px; align-items: start; }
+.toc { position: sticky; top: 16px; max-height: calc(100vh - 32px); overflow-y: auto;
+       background: #fff; border-radius: 8px; padding: 14px 0;
+       box-shadow: 0 1px 3px rgba(0,0,0,.06); }
+.toc-title { font-size: 11px; color: #888; padding: 0 16px 8px; text-transform: uppercase; letter-spacing: .05em; }
+.toc a { display: block; padding: 6px 16px; color: #555; text-decoration: none;
+         font-size: 12px; border-left: 2px solid transparent; line-height: 1.4; }
+.toc a:hover { color: #1976d2; background: #f5faff; }
+.toc a.active { color: #1976d2; font-weight: 600; border-left-color: #1976d2; background: #f5faff; }
+.content { min-width: 0; }
+@media (max-width: 800px) {
+  .layout { grid-template-columns: 1fr; }
+  .toc { position: static; max-height: none; }
+}
+.row { display: flex; align-items: center; gap: 12px; padding: 8px 0; border-bottom: 1px solid #f0f0f0; }
+.row:last-child { border-bottom: none; }
+.key { font-family: monospace; font-size: 12px; flex: 1; }
+.status { font-size: 11px; padding: 2px 8px; border-radius: 10px; font-weight: 600; }
+.status.encrypted { background: #e8f5e9; color: #2e7d32; }
+.status.plaintext { background: #ffebee; color: #c62828; }
+.status.empty { background: #eee; color: #888; }
+button { font-size: 12px; padding: 6px 14px; border-radius: 4px; border: 1px solid #ccc; cursor: pointer; background: #fff; }
+button.primary { background: #1976d2; color: #fff; border-color: #1976d2; }
+button.primary:hover { background: #1565c0; }
+button:disabled { opacity: .5; cursor: not-allowed; }
+.hint { font-size: 12px; color: #888; line-height: 1.6; margin-bottom: 12px; }
+.banner { padding: 12px 16px; border-left: 4px solid; margin-bottom: 16px; }
+.banner.ok { background: #e8f5e9; border-color: #4caf50; }
+.banner.warn { background: #fff3e0; border-color: #ff9800; }
+nav a { font-size: 12px; color: #1976d2; text-decoration: none; margin-right: 16px; }
+.dialog-overlay { display:none; position:fixed; inset:0; background: rgba(0,0,0,.4); z-index:100; align-items: center; justify-content: center; }
+.dialog-overlay.open { display: flex; }
+.dialog { background: #fff; padding: 24px; border-radius: 8px; max-width: 480px; width: 90%; box-shadow: 0 8px 32px rgba(0,0,0,.3); }
+.dialog h3 { font-size: 15px; margin-bottom: 8px; }
+.dialog ul { margin: 12px 0 16px 20px; font-family: monospace; font-size: 11px; max-height: 160px; overflow-y: auto; }
+.dialog .actions { display: flex; gap: 8px; justify-content: flex-end; }
+.service-card { border: 1px solid #e0e0e0; border-radius: 6px; padding: 10px 14px; margin-bottom: 8px; }
+.service-card.disabled { background: #fafafa; opacity: .7; }
+.service-card header { display: flex; align-items: center; gap: 12px; cursor: pointer; }
+.service-card.expanded header { margin-bottom: 8px; }
+.service-card .name { font-weight: 600; flex: 1; }
+.service-card .body { display: none; }
+.service-card.expanded .body { display: block; }
+.service-card .chevron { color: #aaa; font-size: 11px; user-select: none; }
+.service-card .badges { display: flex; gap: 4px; }
+.service-card .badge { font-size: 10px; padding: 2px 6px; border-radius: 8px; background: #f0f0f0; color: #666; }
+.service-card .badge.otp { background: #fff3e0; color: #e65100; }
+.service-card .badge.accept { background: #fce4ec; color: #c2185b; }
+.service-card .desc { font-size: 11px; color: #888; margin-bottom: 8px; }
+.service-card fieldset { border: none; padding: 0; display: grid; grid-template-columns: auto 1fr auto; gap: 6px 12px; align-items: center; margin-bottom: 8px; }
+.service-card fieldset label { font-size: 12px; color: #555; }
+.service-card fieldset input { font-size: 13px; padding: 6px 10px; border: 1px solid #ccc; border-radius: 4px; width: 100%; }
+.service-card .key-status { font-size: 10px; padding: 2px 6px; border-radius: 8px; font-weight: 600; }
+.service-card .key-status.encrypted { background: #e8f5e9; color: #2e7d32; }
+.service-card .key-status.plaintext { background: #ffebee; color: #c62828; }
+.service-card .key-status.missing { background: #eee; color: #888; }
+.toggle { position: relative; width: 36px; height: 20px; background: #ccc; border-radius: 10px; cursor: pointer; transition: .2s; }
+.toggle.on { background: #4caf50; }
+.toggle::after { content: ''; position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; background: #fff; border-radius: 50%; transition: .2s; }
+.toggle.on::after { left: 18px; }
+.tag-chip-box { display: flex; flex-wrap: wrap; gap: 6px; min-height: 36px; padding: 8px; border: 1px solid #ddd; border-radius: 4px; }
+.tag-chip-box.muted { background: #fafafa; }
+.tag-chip { display: inline-flex; align-items: center; gap: 2px; padding: 3px 4px 3px 10px; background: #e3f2fd; color: #1565c0; border-radius: 12px; font-size: 12px; line-height: 1.4; }
+.tag-chip.dis { background: #eeeeee; color: #888; cursor: pointer; padding: 3px 10px; }
+.tag-chip.dis:hover { background: #e0e0e0; color: #555; }
+.tag-chip > button { background: none; border: none; color: inherit; cursor: pointer; padding: 0 5px; font-size: 14px; line-height: 1; border-radius: 50%; }
+.tag-chip > button:hover { background: rgba(0,0,0,0.1); }
+</style>
+</head>
+<body>
+<!--MF2_MASK_WIDGET-->
+<header>
+  <a href="/ui" style="display:flex;align-items:center;text-decoration:none;color:inherit;align-self:stretch;margin:-10px 10px -10px -16px;padding:0 12px">
+    <span style="font-size:15px;font-weight:800;letter-spacing:-0.5px;line-height:1;white-space:nowrap;user-select:none">Open<span style="color:#7eb3ff">Money</span></span>
+  </a>
+  <h1>⚙ 設定</h1>
+  <a href="/ui">💸 支出分類</a>
+  <a href="/invoices">🧾 インボイス管理</a>
+  <a href="/blue_form">📘 青色申告</a>
+  <a href="/raw">📑 生データ</a>
+  <div style="flex:1"></div>
+  <div id="lock-area"></div>
+</header>
+<div class="page-body">
+
+<div id="demo-banner" style="display:none;background:#fff8e1;border-left:4px solid #ffc107;padding:10px 16px;margin-bottom:16px;border-radius:4px;font-size:13px;color:#5d4037">
+  👀 <b>デモモード (読み取り専用)</b> — 設定の変更はできません。
+</div>
+
+<div class="layout">
+  <aside class="toc">
+    <div class="toc-title">セクション</div>
+    <a href="#sec-tailscale">Tailscale 連携</a>
+    <a href="#sec-app-users">アプリユーザ管理</a>
+    <a href="#sec-services">サービス (プラグイン)</a>
+    <a href="#sec-tags">タグ管理</a>
+    <a href="#sec-keys">.env キー暗号化状態</a>
+    <a href="#sec-keychain">OS Keychain 自動解錠</a>
+    <a href="#sec-chpw">マスターパスワード変更</a>
+  </aside>
+
+  <div class="content">
+    <div id="banner" class="banner" style="display:none"></div>
+
+<div class="card" id="sec-tailscale">
+  <h2>Tailscale 連携 (= 外出先から自宅 daemon へアクセス)</h2>
+  <p class="hint">
+    <a href="https://tailscale.com" target="_blank" rel="noopener">Tailscale</a>
+    が install + login 済なら、 自宅 PC の OpenMoney web UI に外出先から
+    <b>ポート開放なしで</b>アクセスできます。 各デバイスは公開鍵で認証され、
+    トラフィックは E2E 暗号化 (= WireGuard ベース)。
+  </p>
+  <div id="tailscale-area">
+    <p style="color:#888;font-size:12px">読込中…</p>
+  </div>
+  <p class="hint" style="margin-top:8px">
+    <button id="tailscale-refresh">再検出</button>
+    &nbsp;Tailscale を install / login 直後はこのボタンで再検出してください。
+  </p>
+</div>
+
+<div class="card" id="sec-app-users">
+  <h2>アプリユーザ管理 (= 連携 Android 端末 + PC)</h2>
+  <p class="hint">
+    この PC の uid に紐付いている <b>Android 端末</b> + <b>PC endpoint</b> 一覧。
+    旧端末・不要 entry はここで解除できます (= 旧 user 宛の OTP push が届かなくなる)。
+    <br>自 PC 自身を解除するには <code>./goodbye.sh</code> を使ってください
+    (= ローカルファイル削除も含む)。
+  </p>
+  <div id="app-users-area">
+    <p style="color:#888;font-size:12px">読込中…</p>
+  </div>
+  <p class="hint" style="margin-top:8px">
+    <button id="app-users-refresh">再読込</button>
+  </p>
+</div>
+
+<div class="card" id="sec-services">
+  <h2>サービス (プラグイン)</h2>
+  <p class="hint">
+    <code>plugins/&lt;name&gt;/</code> に置いた各プラグインが選択肢として登録されます。
+    トグルで daemon の対象から除外可能。env キーは保存時に解錠中なら即暗号化、
+    未解錠なら平文で保存し後でまとめて暗号化できます。<br>
+    新しいプラグイン追加後は <code>uv run python -m src.plugins_build</code> +
+    daemon 再起動。
+  </p>
+  <div id="services-area"></div>
+</div>
+
+<div class="card" id="sec-tags">
+  <h2 onclick="toggleSection('tags-section')" style="cursor:pointer">
+    <span id="tags-section-chevron" class="chevron">▶</span> タグ管理
+  </h2>
+  <div id="tags-section" style="display:none">
+    <p class="hint">
+      ジャンルタグの<b>使用 / 不使用</b>を切り替え + 個人向け<b>カスタムタグ</b>を追加。
+      設定は <code>config/user_tags.toml</code> に保存され、即時反映されます。
+    </p>
+
+    <h3 style="font-size:12px;color:#555;margin:12px 0 6px">使用中のジャンルタグ <span class="hint" style="font-weight:normal">(× で不使用に移動)</span></h3>
+    <div id="tags-genre-active" class="tag-chip-box"></div>
+
+    <h3 style="font-size:12px;color:#555;margin:16px 0 6px">不使用ジャンル <span class="hint" style="font-weight:normal">(クリックで復活)</span></h3>
+    <div id="tags-genre-disabled" class="tag-chip-box muted"></div>
+
+    <h3 style="font-size:12px;color:#555;margin:18px 0 6px">使用中のショップタグ <span class="hint" style="font-weight:normal">(bank または description キーワードで自動付与)</span></h3>
+    <div id="tags-shop-active" class="tag-chip-box"></div>
+
+    <h3 style="font-size:12px;color:#555;margin:12px 0 6px">不使用ショップ</h3>
+    <div id="tags-shop-disabled" class="tag-chip-box muted"></div>
+
+    <h3 style="font-size:12px;color:#555;margin:18px 0 6px">使用中のツールタグ <span class="hint" style="font-weight:normal">(突合・警告・状態系のフィルタ)</span></h3>
+    <div id="tags-tool-active" class="tag-chip-box"></div>
+
+    <h3 style="font-size:12px;color:#555;margin:12px 0 6px">不使用ツール</h3>
+    <div id="tags-tool-disabled" class="tag-chip-box muted"></div>
+
+    <h3 style="font-size:12px;color:#555;margin:18px 0 6px">カスタムタグ</h3>
+    <div id="tags-custom-list" style="display:flex;flex-direction:column;gap:6px"></div>
+    <button onclick="tagAddCustom()" style="margin-top:8px">+ カスタムタグ追加</button>
+
+    <div style="margin-top:14px;display:flex;gap:8px;align-items:center">
+      <button class="primary" onclick="tagSave()">カスタムタグを保存</button>
+      <span id="tags-save-msg" style="font-size:11px"></span>
+    </div>
+  </div>
+</div>
+
+<div class="card" id="sec-keys">
+  <h2 onclick="toggleSection('keys-section')" style="cursor:pointer">
+    <span id="keys-section-chevron" class="chevron">▶</span> .env キー暗号化状態 (全件)
+  </h2>
+  <div id="keys-section" style="display:none">
+    <p class="hint">
+      🔒 = 暗号化済 (AES-256-GCM + scrypt) / 🔓 = 平文 / —— = 値が空。
+      上のサービスカードに含まれない補助キーもここに出ます。
+    </p>
+    <div id="keys-area"></div>
+  </div>
+</div>
+
+<!-- OS Keychain (#24): master password の自動解錠 -->
+<div class="card" id="sec-keychain">
+  <h2 onclick="toggleSection('keychain-section')" style="cursor:pointer">
+    <span id="keychain-section-chevron" class="chevron">▶</span> OS Keychain 自動解錠
+  </h2>
+  <div id="keychain-section" style="display:none">
+    <p class="hint">
+      OS Keychain (macOS は Keychain Services) に master password を保存しておくと、
+      daemon 再起動のたびに <code>/login</code> から打ち直す必要がなくなります。
+      Keychain は OS のログインアカウントで保護されるので、UI 暗号と同等以上の
+      セキュリティで保管されます。
+    </p>
+    <div id="keychain-area" class="hint">読み込み中…</div>
+  </div>
+</div>
+
+<!-- master password 変更 -->
+<div class="card" id="sec-chpw">
+  <h2 onclick="toggleSection('chpw-section')" style="cursor:pointer">
+    <span id="chpw-section-chevron" class="chevron">▶</span> マスターパスワード変更
+  </h2>
+  <div id="chpw-section" style="display:none">
+    <p class="hint">
+      .env の暗号化済値を全て新パスワードで再暗号化します。
+      OS Keychain に master を保存している場合は同時に上書き更新されます。
+      解錠中のみ実行可能。
+    </p>
+    <div id="chpw-area" style="display:flex;flex-direction:column;gap:8px;max-width:360px">
+      <label style="display:flex;flex-direction:column;gap:2px;font-size:12px;color:#555">
+        現在のパスワード
+        <input type="password" id="chpw-old" autocomplete="current-password"
+               style="padding:6px 10px;font-size:14px;border:1px solid #ccc;border-radius:4px">
+      </label>
+      <label style="display:flex;flex-direction:column;gap:2px;font-size:12px;color:#555">
+        新しいパスワード
+        <input type="password" id="chpw-new" autocomplete="new-password"
+               style="padding:6px 10px;font-size:14px;border:1px solid #ccc;border-radius:4px">
+      </label>
+      <label style="display:flex;flex-direction:column;gap:2px;font-size:12px;color:#555">
+        新しいパスワード (確認)
+        <input type="password" id="chpw-new2" autocomplete="new-password"
+               style="padding:6px 10px;font-size:14px;border:1px solid #ccc;border-radius:4px">
+      </label>
+      <div>
+        <button class="primary" onclick="submitChangePw()">パスワードを変更</button>
+        <span id="chpw-msg" style="margin-left:8px;font-size:12px"></span>
+      </div>
+    </div>
+  </div>
+</div>
+
+  </div><!-- /.content -->
+</div><!-- /.layout -->
+
+<!-- 平文検知ダイアログ -->
+<div id="dlg" class="dialog-overlay">
+  <div class="dialog">
+    <h3>⚠ 平文の値が残っています</h3>
+    <p>以下のキーが平文で .env に保存されています。今暗号化しますか？</p>
+    <ul id="dlg-list"></ul>
+    <div class="actions">
+      <button onclick="closeDlg()">あとで</button>
+      <button class="primary" onclick="encryptAll()">今すぐ暗号化</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// Scrollspy: 表示されているカードに対応する toc リンクをハイライト
+(() => {
+  const links = [...document.querySelectorAll('.toc a')];
+  if (!links.length) return;
+  const sections = links
+    .map(a => document.querySelector(a.getAttribute('href')))
+    .filter(Boolean);
+  function setActive(id) {
+    links.forEach(a => a.classList.toggle('active', a.getAttribute('href') === id));
+  }
+  // 初期: 先頭
+  if (sections[0]) setActive('#' + sections[0].id);
+  const observer = new IntersectionObserver((entries) => {
+    // 一番上に近い (top の小さい) entry を選ぶ
+    const visible = entries.filter(e => e.isIntersecting)
+                           .sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top);
+    if (visible.length) setActive('#' + visible[0].target.id);
+  }, { rootMargin: '-10% 0px -60% 0px' });
+  sections.forEach(s => observer.observe(s));
+  // クリックでスムーズスクロール
+  links.forEach(a => a.addEventListener('click', (e) => {
+    e.preventDefault();
+    const target = document.querySelector(a.getAttribute('href'));
+    if (target) target.scrollIntoView({behavior: 'smooth', block: 'start'});
+    setActive(a.getAttribute('href'));
+  }));
+})();
+</script>
+
+<script>
+let _shownDialog = false;
+
+async function refresh() {
+  await Promise.all([refreshSecurity(), refreshServices(), refreshTags()]);
+}
+
+// ─── タグ管理 ───
+let _tagState = { all_genres: [], all_shops: [], disabled: [], custom: [] };
+
+async function refreshTags() {
+  const r = await fetch('/api/user-tags').then(r => r.json());
+  _tagState = r;
+  renderTags();
+}
+
+function renderTags() {
+  const disabledSet = new Set(_tagState.disabled || []);
+  const esc = s => (s || '').replace(/[<>&"]/g, c => ({'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;'}[c]));
+  // ジャンルタグ
+  const all = (_tagState.all_genres || []).map(g => typeof g === 'string' ? {id: g, label: g} : g);
+  const ga = document.getElementById('tags-genre-active');
+  const gd = document.getElementById('tags-genre-disabled');
+  if (ga) {
+    const active = all.filter(g => !disabledSet.has(g.id));
+    ga.innerHTML = active.length
+      ? active.map(g => `<span class="tag-chip">${esc(g.label)}<button onclick="tagToggleBuiltin('${g.id}', true)" title="不使用にする">×</button></span>`).join('')
+      : '<span class="hint">なし</span>';
+  }
+  if (gd) {
+    const dis = all.filter(g => disabledSet.has(g.id));
+    gd.innerHTML = dis.length
+      ? dis.map(g => `<span class="tag-chip dis" onclick="tagToggleBuiltin('${g.id}', false)" title="使用に戻す">+ ${esc(g.label)}</span>`).join('')
+      : '<span class="hint">なし</span>';
+  }
+  // ショップタグ (= store: prefix)
+  const shops = (_tagState.all_shops || []).map(s => typeof s === 'string' ? {id: s, label: s} : s);
+  const sa = document.getElementById('tags-shop-active');
+  const sd = document.getElementById('tags-shop-disabled');
+  if (sa) {
+    const active = shops.filter(s => !disabledSet.has(s.id));
+    sa.innerHTML = active.length
+      ? active.map(s => `<span class="tag-chip">${esc(s.label)}<button onclick="tagToggleBuiltin('${s.id}', true)" title="不使用にする">×</button></span>`).join('')
+      : '<span class="hint">なし</span>';
+  }
+  if (sd) {
+    const dis = shops.filter(s => disabledSet.has(s.id));
+    sd.innerHTML = dis.length
+      ? dis.map(s => `<span class="tag-chip dis" onclick="tagToggleBuiltin('${s.id}', false)" title="使用に戻す">+ ${esc(s.label)}</span>`).join('')
+      : '<span class="hint">なし</span>';
+  }
+  // ツールタグ (= matched_months, conflict, no_receipt 等)
+  const tools = (_tagState.all_tools || []).map(t => typeof t === 'string' ? {id: t, label: t} : t);
+  const ta = document.getElementById('tags-tool-active');
+  const td = document.getElementById('tags-tool-disabled');
+  if (ta) {
+    const active = tools.filter(t => !disabledSet.has(t.id));
+    ta.innerHTML = active.length
+      ? active.map(t => `<span class="tag-chip">${esc(t.label)}<button onclick="tagToggleBuiltin('${t.id}', true)" title="不使用にする">×</button></span>`).join('')
+      : '<span class="hint">なし</span>';
+  }
+  if (td) {
+    const dis = tools.filter(t => disabledSet.has(t.id));
+    td.innerHTML = dis.length
+      ? dis.map(t => `<span class="tag-chip dis" onclick="tagToggleBuiltin('${t.id}', false)" title="使用に戻す">+ ${esc(t.label)}</span>`).join('')
+      : '<span class="hint">なし</span>';
+  }
+  // カスタムタグ一覧
+  const cl = document.getElementById('tags-custom-list');
+  if (cl) {
+    cl.innerHTML = (_tagState.custom || []).map((c, i) => `
+      <div data-custom-idx="${i}" style="display:grid;grid-template-columns:auto 1fr 1fr 2fr auto;gap:6px;align-items:center;font-size:12px;padding:6px;border:1px solid #eee;border-radius:4px">
+        <input type="checkbox" class="custom-enabled" ${disabledSet.has(c.id) ? '' : 'checked'} title="使用/不使用">
+        <input type="text" class="custom-id" value="${escAttr(c.id)}" placeholder="ID" style="padding:4px 6px;font-family:monospace">
+        <input type="text" class="custom-label" value="${escAttr(c.label || '')}" placeholder="表示ラベル" style="padding:4px 6px">
+        <input type="text" class="custom-keywords" value="${escAttr((c.keywords || []).join(', '))}" placeholder="keyword1, keyword2, ..." style="padding:4px 6px">
+        <button onclick="tagDeleteCustom(${i})" title="削除" style="padding:2px 8px;color:#c62828">×</button>
+      </div>
+    `).join('');
+  }
+}
+
+async function tagToggleBuiltin(id, toDisabled) {
+  const set = new Set(_tagState.disabled || []);
+  if (toDisabled) set.add(id); else set.delete(id);
+  _tagState.disabled = [...set];
+  renderTags();
+  // 即時保存 (カスタムタグ含めて現状の編集中状態は触らない: TOML には builtin disabled + 既存 custom)
+  const msg = document.getElementById('tags-save-msg');
+  msg.style.color = '#555'; msg.textContent = '保存中...';
+  const r = await fetch('/api/user-tags', {
+    method: 'POST', headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({ disabled: _tagState.disabled, custom: _tagState.custom || [] }),
+  });
+  if (!r.ok) {
+    msg.style.color = '#c62828'; msg.textContent = '保存失敗';
+    return;
+  }
+  msg.style.color = '#2e7d32'; msg.textContent = `✅ ${id} を ${toDisabled ? '不使用' : '使用'} に`;
+}
+
+function escAttr(s) { return (s || '').replace(/"/g, '&quot;'); }
+
+function tagAddCustom() {
+  _tagState.custom = _tagState.custom || [];
+  _tagState.custom.push({ id: '', label: '', keywords: [] });
+  renderTags();
+}
+
+function tagDeleteCustom(i) {
+  _tagState.custom.splice(i, 1);
+  renderTags();
+}
+
+async function tagSave() {
+  // ジャンルタグ: チェック外れている = disabled
+  const disabled = [...document.querySelectorAll('#tags-genre-list input[type=checkbox]')]
+    .filter(cb => !cb.checked).map(cb => cb.dataset.tagId);
+  // カスタムタグ: id 必須、enabled checkbox は別管理 (現状: id を disabled に含める)
+  const custom = [...document.querySelectorAll('#tags-custom-list [data-custom-idx]')].map(row => {
+    return {
+      id: row.querySelector('.custom-id').value.trim(),
+      label: row.querySelector('.custom-label').value.trim(),
+      keywords: row.querySelector('.custom-keywords').value.split(',').map(s => s.trim()).filter(Boolean),
+      _enabled: row.querySelector('.custom-enabled').checked,
+    };
+  });
+  const final_disabled = disabled.slice();
+  const final_custom = custom.filter(c => c.id);
+  for (const c of final_custom) {
+    if (!c._enabled) final_disabled.push(c.id);
+    delete c._enabled;
+  }
+  const msg = document.getElementById('tags-save-msg');
+  msg.style.color = '#555'; msg.textContent = '保存中...';
+  const r = await fetch('/api/user-tags', {
+    method: 'POST', headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({ disabled: final_disabled, custom: final_custom }),
+  });
+  if (!r.ok) {
+    const err = await r.json().catch(() => ({}));
+    msg.style.color = '#c62828';
+    msg.textContent = '失敗: ' + (err.detail || r.status);
+    return;
+  }
+  msg.style.color = '#2e7d32';
+  msg.textContent = '✅ 保存しました';
+  await refreshTags();
+}
+
+async function refreshServices() {
+  const r = await fetch('/api/services').then(r => r.json());
+  const area = document.getElementById('services-area');
+  if (!r.services.length) {
+    area.innerHTML = `<div class="hint">プラグイン未検出。<code>plugins/&lt;name&gt;/plugin.py</code> を作成して <code>python -m src.plugins_build</code> + daemon 再起動。</div>`;
+    return;
+  }
+  let html = r.services.map(s => {
+    const badges = [
+      s.requires_otp ? `<span class="badge otp">OTP</span>` : '',
+      s.requires_user_accept ? `<span class="badge accept">承認</span>` : '',
+      ...s.depends_on.map(d => `<span class="badge">→ ${d}</span>`),
+      ...(s.dependents || []).map(d => `<span class="badge" style="background:#fff3e0;color:#e65100">← ${d}</span>`),
+    ].filter(Boolean).join('');
+    const inputs = s.env_keys.map(k => {
+      const statusLabel = {encrypted:'🔒 暗号化済', plaintext:'🔓 平文', missing:'—— 未設定'}[k.status];
+      const helpLine = k.help ? `<div class="hint" style="grid-column:1/-1;margin:-4px 0 6px;color:#666;font-size:11px">${k.help}</div>` : '';
+      // bool 型 = ON/OFF チェックボックス。 値は "1" or "" (= missing) で
+      // 保存される。 既に "1" 等が保存済みなら status='plaintext'/'encrypted' で
+      // checked 表示
+      if (k.type === 'bool') {
+        const checked = k.status !== 'missing' ? 'checked' : '';
+        return `<label>${k.label}</label>
+                <label style="display:flex;align-items:center;gap:6px;cursor:pointer">
+                  <input type="checkbox" name="${k.key}" data-svc="${s.name}" data-bool="1" ${checked}>
+                  <span style="font-size:12px;color:#666">${checked ? 'ON' : 'OFF'}</span>
+                </label>
+                <span class="key-status ${k.status}">${statusLabel}</span>
+                ${helpLine}`;
+      }
+      const placeholder = k.status === 'encrypted' ? '••••••••' : (k.placeholder || '');
+      const patternAttr = k.pattern ? ` pattern="${k.pattern.replace(/"/g, '&quot;')}" data-pattern-error="${(k.pattern_error||'').replace(/"/g, '&quot;')}" title="${(k.pattern_error || k.pattern).replace(/"/g, '&quot;')}"` : '';
+      return `<label>${k.label}</label>
+              <input type="${k.type === 'password' ? 'password' : 'text'}"
+                     name="${k.key}" data-svc="${s.name}"
+                     placeholder="${placeholder}"${patternAttr}>
+              <span class="key-status ${k.status}">${statusLabel}</span>
+              ${helpLine}`;
+    }).join('');
+    const banksLine = s.provided_banks.length
+      ? `<div class="hint" style="margin:0 0 6px">担当 bank: ${s.provided_banks.join(' / ')} — 既存データ ${s.data.row_count}件 (${s.data.oldest||'-'} 〜 ${s.data.latest||'-'})</div>`
+      : '';
+    return `<div class="service-card ${s.enabled ? '' : 'disabled'}" data-name="${s.name}">
+      <header onclick="toggleExpand(this)">
+        <div class="toggle ${s.enabled ? 'on' : ''}"
+             onclick="event.stopPropagation();toggleService('${s.name}', ${!s.enabled})"></div>
+        <div class="name">${s.display_name}</div>
+        <span class="chevron">▶</span>
+      </header>
+      <div class="body">
+        <div class="badges" style="margin-bottom:6px">${badges}</div>
+        <div class="desc">${s.description || ''}</div>
+        ${banksLine}
+        <fieldset>${inputs}</fieldset>
+        <button class="primary" onclick="saveService('${s.name}')">保存</button>
+      </div>
+    </div>`;
+  }).join('');
+
+  // orphan: registry にいないが DB に enabled 行が残っているもの
+  if (r.orphans && r.orphans.length) {
+    html += `<h3 style="font-size:12px;color:#888;margin:16px 0 6px">
+      ⚠ 不明なプラグイン (registry 未検出 / 削除済?)</h3>`;
+    html += r.orphans.map(o => `
+      <div class="service-card disabled">
+        <header>
+          <div class="name">${o.name}</div>
+          <button onclick="deleteOrphan('${o.name}')">削除</button>
+        </header>
+        <div class="hint">対応する plugins/${o.name}/ が見つかりません。設定行を削除できます (transactions 等のデータには影響しません)。</div>
+      </div>`).join('');
+  }
+
+  area.innerHTML = html;
+}
+
+async function toggleService(name, enabled) {
+  let force = false;
+  let r = await fetch(`/api/services/${name}/toggle`, {
+    method: 'POST', headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({enabled, force: false}),
+  });
+  if (r.status === 409) {
+    const err = await r.json();
+    const blockers = (err.detail && err.detail.blockers) || [];
+    const ok = confirm(
+      `${name} を OFF にすると以下のプラグインが動作不能になります:\n` +
+      `  ${blockers.join(', ')}\n\nそれでも OFF にしますか？`
+    );
+    if (!ok) return;
+    force = true;
+    r = await fetch(`/api/services/${name}/toggle`, {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({enabled, force: true}),
+    });
+  }
+  if (!r.ok) {
+    const err = await r.json();
+    alert('切替失敗: ' + (err.detail || r.status));
+    return;
+  }
+  refreshServices();
+}
+
+function toggleSection(id) {
+  const el = document.getElementById(id);
+  const ch = document.getElementById(id + '-chevron');
+  const open = el.style.display === 'none' || !el.style.display;
+  el.style.display = open ? 'block' : 'none';
+  if (ch) ch.textContent = open ? '▼' : '▶';
+}
+
+function toggleExpand(header) {
+  const card = header.closest('.service-card');
+  card.classList.toggle('expanded');
+  const ch = card.querySelector('.chevron');
+  if (ch) ch.textContent = card.classList.contains('expanded') ? '▼' : '▶';
+}
+
+async function deleteOrphan(name) {
+  if (!confirm(`${name} の設定行を削除しますか？\n(transactions テーブルのデータは保持されます)`)) return;
+  await fetch(`/api/services/${name}`, {method: 'DELETE'});
+  refreshServices();
+}
+
+async function saveService(name) {
+  const inputs = document.querySelectorAll(`input[data-svc="${name}"]`);
+  const values = {};
+  // 保存前に pattern バリデーション (= サーバ側でも同じチェックがあるが、 UI で先に弾く)
+  for (const i of inputs) {
+    // checkbox (= bool 型) は常に値を送る (= "1" or "")。 既存値の OFF 化を可能に
+    if (i.getAttribute('data-bool') === '1') {
+      values[i.name] = i.checked ? '1' : '';
+      continue;
+    }
+    if (!i.value) continue;
+    const pat = i.getAttribute('pattern');
+    if (pat) {
+      const re = new RegExp('^(?:' + pat + ')$');
+      if (!re.test(i.value)) {
+        const msg = i.getAttribute('data-pattern-error') || `${i.name} の形式が不正です`;
+        alert(msg);
+        i.focus();
+        return;
+      }
+    }
+    values[i.name] = i.value;
+  }
+  if (!Object.keys(values).length) return;
+  const r = await fetch(`/api/services/${name}/env`, {
+    method: 'POST', headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({values}),
+  });
+  if (!r.ok) {
+    const err = await r.json();
+    const detail = err.detail;
+    const msg = (detail && typeof detail === 'object' && detail.message) ? detail.message : (detail || r.status);
+    alert('保存失敗: ' + msg);
+    return;
+  }
+  inputs.forEach(i => i.value = '');
+  refresh();
+}
+
+function applyDemoMode() {
+  const bar = document.getElementById('demo-banner');
+  if (bar) bar.style.display = 'block';
+  // 全ボタン・テキスト入力・チェックボックス・トグルを無効化
+  document.querySelectorAll('button, input, .toggle').forEach(el => {
+    el.disabled = true;
+    el.style.pointerEvents = 'none';
+    el.style.opacity = '0.45';
+  });
+  // サービストグルのクリックイベントも無効化
+  document.querySelectorAll('.toggle').forEach(el => {
+    el.onclick = null;
+  });
+}
+
+async function refreshSecurity() {
+  const r = await fetch('/api/security/status').then(r => r.json());
+  const banner = document.getElementById('banner');
+  const lockArea = document.getElementById('lock-area');
+  const keysArea = document.getElementById('keys-area');
+  if (r.demo_mode) applyDemoMode();
+  // OS Keychain セクション
+  const kcArea = document.getElementById('keychain-area');
+  if (kcArea) {
+    if (!r.keychain_available) {
+      kcArea.innerHTML = '<span style="color:#888">この OS では Keychain backend が使えません</span>';
+    } else if (!r.unlocked) {
+      kcArea.innerHTML = `<span style="color:#888">先に解錠してください。Keychain 操作は解錠中のみ可能です。</span>
+        ${r.keychain_has_master ? '<div style="margin-top:8px"><button onclick="kcDelete()">Keychain から削除</button></div>' : ''}`;
+    } else if (r.keychain_has_master) {
+      kcArea.innerHTML = `
+        <div style="background:#e8f5e9;color:#1b5e20;padding:8px 12px;border-radius:4px;font-size:12px;margin-bottom:8px">
+          ✅ master password が Keychain に保存されています。daemon 再起動時に自動解錠されます。
+        </div>
+        <button onclick="kcDelete()">Keychain から削除</button>
+        <button class="primary" onclick="kcSave()" title="現在の master を上書き保存">再保存</button>`;
+    } else {
+      kcArea.innerHTML = `
+        <div style="font-size:12px;color:#555;margin-bottom:8px">
+          現在解錠中の master password を Keychain に保存できます。
+        </div>
+        <button class="primary" onclick="kcSave()">Keychain に保存</button>`;
+    }
+  }
+
+  // 解錠中: 全ページ共通の右上 🔒 (mask widget) を使うので lock-area は空。
+  if (r.unlocked) {
+    banner.style.display = 'none';
+    lockArea.innerHTML = '';
+  } else if (r.has_encrypted_email) {
+    banner.className = 'banner warn';
+    banner.style.display = 'block';
+    banner.innerHTML = '🔒 UI ロック中 (scrape は継続)。<a href="/login">/login</a> から再解錠してください。';
+    lockArea.innerHTML = `<a href="/login"><button class="primary">解錠</button></a>`;
+  } else if (r.has_email) {
+    banner.className = 'banner warn';
+    banner.style.display = 'block';
+    banner.textContent = '.env の email は平文のまま。下のサービスカードで保存→暗号化が走ります。';
+    lockArea.innerHTML = '';
+  } else {
+    banner.className = 'banner warn';
+    banner.style.display = 'block';
+    banner.innerHTML = '.env に <code>*_EMAIL</code> が登録されていません。先に登録してください。';
+    lockArea.innerHTML = '';
+  }
+
+  const html = r.keys.length === 0
+    ? `<div class="hint">.env に取得対象キーが見つかりません。</div>`
+    : r.keys.map(k => {
+      const cls = k.encrypted ? 'encrypted' : 'plaintext';
+      const label = k.encrypted ? '🔒 暗号化済' : '🔓 平文';
+      const canEnc = !k.encrypted && r.unlocked;
+      const btn = canEnc
+        ? `<button class="primary" onclick="encryptKey('${k.key}')">暗号化</button>`
+        : (!k.encrypted ? `<button disabled title="解錠が必要">暗号化</button>` : '');
+      return `<div class="row">
+        <span class="key">${k.key}</span>
+        <span class="status ${cls}">${label}</span>
+        ${btn}
+      </div>`;
+    }).join('');
+  keysArea.innerHTML = html;
+
+  // 解錠中で平文があればダイアログ（ロード時 1 回のみ）
+  if (r.unlocked && r.plaintext_keys.length > 0 && !_shownDialog) {
+    _shownDialog = true;
+    document.getElementById('dlg-list').innerHTML =
+      r.plaintext_keys.map(k => `<li>${k}</li>`).join('');
+    document.getElementById('dlg').classList.add('open');
+  }
+}
+
+function closeDlg() {
+  document.getElementById('dlg').classList.remove('open');
+}
+
+async function submitChangePw() {
+  const old = document.getElementById('chpw-old').value;
+  const nu = document.getElementById('chpw-new').value;
+  const nu2 = document.getElementById('chpw-new2').value;
+  const msg = document.getElementById('chpw-msg');
+  msg.style.color = '#c62828';
+  if (!old || !nu) { msg.textContent = '両方入力してください'; return; }
+  if (nu !== nu2) { msg.textContent = '新パスワードが一致しません'; return; }
+  if (old === nu) { msg.textContent = '新パスワードが現在と同じです'; return; }
+  msg.style.color = '#555';
+  msg.textContent = '再暗号化中...';
+  const r = await fetch('/api/security/change-password', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({old_password: old, new_password: nu}),
+  });
+  if (!r.ok) {
+    const err = await r.json().catch(() => ({}));
+    msg.style.color = '#c62828';
+    msg.textContent = '失敗: ' + (err.detail || r.status);
+    return;
+  }
+  const data = await r.json();
+  msg.style.color = '#1b5e20';
+  msg.textContent = `✅ 変更完了 (${data.rewritten} entry を再暗号化)`;
+  document.getElementById('chpw-old').value = '';
+  document.getElementById('chpw-new').value = '';
+  document.getElementById('chpw-new2').value = '';
+}
+
+async function kcSave() {
+  const r = await fetch('/api/security/keychain-save', {method: 'POST'});
+  if (!r.ok) {
+    const err = await r.json().catch(() => ({}));
+    alert('Keychain 保存失敗: ' + (err.detail || r.status));
+    return;
+  }
+  refresh();
+}
+
+async function kcDelete() {
+  if (!confirm('Keychain から master password を削除しますか?\n(自動解錠が無くなり、再起動時は /login が必要になります)')) return;
+  const r = await fetch('/api/security/keychain-delete', {method: 'POST'});
+  if (!r.ok) {
+    const err = await r.json().catch(() => ({}));
+    alert('Keychain 削除失敗: ' + (err.detail || r.status));
+    return;
+  }
+  refresh();
+}
+
+async function encryptAll() {
+  const r = await fetch('/api/security/encrypt-all-plaintext', {method: 'POST'});
+  if (!r.ok) {
+    const err = await r.json();
+    alert('暗号化失敗: ' + (err.detail || r.status));
+    return;
+  }
+  closeDlg();
+  refresh();
+}
+
+async function lockSession() {
+  await fetch('/api/security/lock', {method: 'POST'});
+  location.href = '/login';
+}
+
+async function encryptKey(key) {
+  const r = await fetch('/api/security/encrypt-key', {
+    method: 'POST', headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({key}),
+  });
+  if (!r.ok) {
+    const err = await r.json();
+    alert('暗号化失敗: ' + (err.detail || r.status));
+    return;
+  }
+  refresh();
+}
+
+refresh();
+
+// ─── Tailscale 連携 ─────────────────────────────────────────────
+async function refreshTailscale() {
+  const area = document.getElementById('tailscale-area');
+  area.innerHTML = '<p style="color:#888;font-size:12px">読込中…</p>';
+  let r;
+  try {
+    r = await fetch('/api/tailscale/info');
+  } catch (e) {
+    area.innerHTML = `<p style="color:#c62828;font-size:12px">取得失敗: ${e.message}</p>`;
+    return;
+  }
+  if (!r.ok) {
+    area.innerHTML = `<p style="color:#c62828;font-size:12px">取得失敗: HTTP ${r.status}</p>`;
+    return;
+  }
+  const j = await r.json();
+  if (!j.available) {
+    area.innerHTML = `
+      <div class="banner warn" style="margin-bottom:0">
+        Tailscale は検出されませんでした。<br>
+        <span style="font-size:11px;color:#888">${escapeHtmlTs(j.reason || '')}</span>
+      </div>`;
+    return;
+  }
+  const url = j.url || '';
+  const parts = [];
+  if (j.dns_name) parts.push(`<span class="key">${escapeHtmlTs(j.dns_name)}</span> (MagicDNS)`);
+  if (j.ipv4) parts.push(`<span class="key">${escapeHtmlTs(j.ipv4)}</span> (IPv4)`);
+  if (j.tailnet) parts.push(`tailnet: <code>${escapeHtmlTs(j.tailnet)}</code>`);
+  area.innerHTML = `
+    <div class="banner ok" style="margin-bottom:12px">
+      ✓ Tailscale 検出済み (${j.online ? 'online' : 'offline'})
+    </div>
+    <div class="row">
+      <div class="key" style="flex:0 0 100px">外出先 URL</div>
+      <div style="flex:1;word-break:break-all">
+        <a href="${escapeHtmlTs(url)}" target="_blank" rel="noopener" style="color:#1976d2;font-family:monospace;font-size:13px">${escapeHtmlTs(url)}</a>
+      </div>
+      <button onclick="copyToClipboardTs('${escapeHtmlTs(url).replace(/'/g, '&#39;')}')">コピー</button>
+    </div>
+    <div class="row" style="font-size:11px;color:#888">
+      ${parts.join(' / ')}
+    </div>
+    <p class="hint" style="margin-top:12px">
+      Android (= OpenMoney Eclipse) や別 PC からこの URL を開けば daemon 直
+      アクセスできます。 ポート開放不要 / 自宅 LAN 外でも到達可能。
+      &nbsp;<b>条件</b>: 接続元 PC / 端末も同じ Tailscale tailnet に join 済 +
+      OpenMoney daemon が起動中。
+    </p>
+  `;
+}
+
+function escapeHtmlTs(s) {
+  return String(s ?? '').replace(/[&<>"']/g, c =>
+    ({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[c]));
+}
+
+async function copyToClipboardTs(text) {
+  try {
+    await navigator.clipboard.writeText(text);
+    alert('コピーしました: ' + text);
+  } catch (e) {
+    prompt('コピー失敗。 手動でコピーしてください:', text);
+  }
+}
+
+document.getElementById('tailscale-refresh').addEventListener('click', refreshTailscale);
+refreshTailscale();
+
+// ─── アプリユーザ管理 ──────────────────────────────────────────
+async function refreshAppUsers() {
+  const area = document.getElementById('app-users-area');
+  area.innerHTML = '<p style="color:#888;font-size:12px">読込中…</p>';
+  let r;
+  try {
+    r = await fetch('/api/users');
+  } catch (e) {
+    area.innerHTML = `<p style="color:#c62828;font-size:12px">取得失敗: ${escapeHtmlAU(e.message)}</p>`;
+    return;
+  }
+  if (!r.ok) {
+    let msg = `HTTP ${r.status}`;
+    try { msg = (await r.json()).detail || msg; } catch {}
+    area.innerHTML = `<p style="color:#c62828;font-size:12px">取得失敗: ${escapeHtmlAU(JSON.stringify(msg))}</p>`;
+    return;
+  }
+  const j = await r.json();
+  const parts = [];
+
+  const androids = j.android_devices || [];
+  if (androids.length) {
+    parts.push('<h4 style="margin:12px 0 6px;font-size:13px">📱 Android 端末</h4>');
+    for (const d of androids) {
+      parts.push(`
+        <div class="row">
+          <div class="key" style="flex:1;min-width:0">
+            ${escapeHtmlAU(d.device_name || '(名前なし)')}
+            <span style="color:#888;font-size:11px">&nbsp;${escapeHtmlAU(d.fcm_token_masked || '')}</span>
+          </div>
+          <div style="font-size:11px;color:#888">last: ${escapeHtmlAU((d.last_active_at || '-').slice(0, 19))}</div>
+          <button onclick="revokeAndroidUser('${escapeHtmlAU(d.fcm_token_id)}', '${escapeHtmlAU(d.device_name || '名前なし').replace(/'/g, '&#39;')}', this)">解除</button>
+        </div>
+      `);
+    }
+  }
+
+  const pcs = j.pc_endpoints || [];
+  if (pcs.length) {
+    parts.push('<h4 style="margin:16px 0 6px;font-size:13px">💻 PC endpoint</h4>');
+    for (const p of pcs) {
+      // backend に申告されている URL 一覧 (= 🏠 LAN URL は daemon が自動検出して定期申告)
+      const urlLines = [];
+      const lanUrls = p.lan_urls || [];
+      for (const u of lanUrls) {
+        if (u) urlLines.push(`<div style="font-size:11px;font-family:monospace">🏠 <a href="${escapeHtmlAU(u)}" target="_blank" rel="noopener" style="color:#1976d2">${escapeHtmlAU(u)}</a></div>`);
+      }
+      if (p.tailscale_url) {
+        urlLines.push(`<div style="font-size:11px;font-family:monospace">🔗 <a href="${escapeHtmlAU(p.tailscale_url)}" target="_blank" rel="noopener" style="color:#1976d2">${escapeHtmlAU(p.tailscale_url)}</a></div>`);
+      }
+      parts.push(`
+        <div class="row">
+          <div class="key" style="flex:1;min-width:0">
+            ${escapeHtmlAU(p.device_label || '(ラベルなし)')}
+            <span style="color:#888;font-size:11px">&nbsp;${escapeHtmlAU(p.pc_token_masked || '')}</span>
+            ${urlLines.length ? `<div style="margin-top:4px">${urlLines.join('')}</div>` : ''}
+          </div>
+          <div style="font-size:11px;color:#888">last: ${escapeHtmlAU((p.last_active_at || '-').slice(0, 19))}</div>
+        </div>
+      `);
+    }
+    parts.push(`<p style="font-size:11px;color:#888;margin-top:6px">
+      PC endpoint の解除は Android アプリ or 各 PC で <code>./goodbye.sh</code> を実行してください。
+    </p>`);
+  }
+
+  if (!androids.length && !pcs.length) {
+    parts.push('<p style="color:#888;font-size:12px">登録端末なし</p>');
+  }
+  area.innerHTML = parts.join('');
+}
+
+async function revokeAndroidUser(fcmTokenId, deviceName, btnEl) {
+  if (!confirm(`端末 「${deviceName}」 を解除しますか?\n以後この端末には OTP / 通知が届かなくなります。`)) return;
+  if (btnEl) { btnEl.disabled = true; btnEl.textContent = '解除中…'; }
+  let r;
+  try {
+    r = await fetch(`/api/users/android/${encodeURIComponent(fcmTokenId)}`, { method: 'DELETE' });
+  } catch (e) {
+    alert(`解除失敗: ${e.message}`);
+    if (btnEl) { btnEl.disabled = false; btnEl.textContent = '解除'; }
+    return;
+  }
+  if (!r.ok) {
+    let detail = `HTTP ${r.status}`;
+    try { detail = JSON.stringify((await r.json()).detail); } catch {}
+    alert(`解除失敗: ${detail}`);
+    if (btnEl) { btnEl.disabled = false; btnEl.textContent = '解除'; }
+    return;
+  }
+  refreshAppUsers();
+}
+
+function escapeHtmlAU(s) {
+  return String(s ?? '').replace(/[&<>"']/g, c =>
+    ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+document.getElementById('app-users-refresh').addEventListener('click', refreshAppUsers);
+refreshAppUsers();
+</script>
+</div><!-- /.page-body -->
+</body>
+</html>

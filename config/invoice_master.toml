@@ -1,0 +1,46 @@
+# OpenMoney インボイスマスター 共通テンプレート (Step 4)
+#
+# 大手プラットフォームの公開された vendor 名 ↔ 適格請求書発行事業者番号
+# (T で始まる 13 桁) を main 共有のテンプレートとして登録する。
+# ここの値は事実上「公的データ」なので main で全員共有して問題ない。
+#
+# 起動時に src.personal.invoice_master.sync_invoice_vendors() が
+# config/invoice_master.toml + config/invoice_master.local.toml を
+# 読み込み、invoice_vendors テーブルに INSERT OR IGNORE で取り込む。
+# **既存の user 編集は上書きしない** ので、UI で company_name や T番号を
+# 修正したものは保持される。
+#
+# 個人特有の事業者 (近所のガソスタ・ホムセン・歯科 等) は
+# config/invoice_master.local.toml に同形式で書く (個人 branch で管理)。
+# 詳細: docs/personal_layer_plan.md
+
+
+[[vendors]]
+service_name = "Amazon"
+company_name = "アマゾンジャパン合同会社"
+invoice_number = "T3040001028447"
+
+[[vendors]]
+service_name = "Mercari"
+company_name = "株式会社メルカリ"
+invoice_number = "T6010701027558"
+
+[[vendors]]
+service_name = "CAMPFIRE"
+company_name = "株式会社CAMPFIRE"
+invoice_number = "T8011001067978"
+
+[[vendors]]
+service_name = "Yahoo!ショッピング"
+company_name = "LINEヤフー株式会社"
+invoice_number = "T4010401039979"
+
+[[vendors]]
+service_name = "ヤフオク購入"
+company_name = "LINEヤフー株式会社"
+invoice_number = "T4010401039979"
+
+[[vendors]]
+service_name = "楽天市場"
+company_name = "楽天グループ株式会社"
+invoice_number = "T9010701020592"

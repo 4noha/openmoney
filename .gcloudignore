@@ -1,0 +1,25 @@
+# Cloud Build 用 ignore ファイル (.gitignore を上書き)
+# demo/ は Cloud Build に含める必要があるため gitignore から除外
+.gcloudignore
+.git/
+.venv/
+*.db
+*.db-shm
+*.db-wal
+.env
+firebase-service-account.json
+.browser_data/
+.pw_data/
+.cache/
+invoices/
+receipts/
+.backups/
+tests/_local/
+__pycache__/
+*.pyc
+.claude/
+開発用マスターパスワード
+plugins/_generated_registry.py
+config/*.local.toml
+config/user_tags.toml
+config/user_aoiro.toml

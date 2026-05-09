@@ -1,0 +1,28 @@
+# 個人カード差分テンプレート — このファイルを `cards.local.toml` にコピーして編集する。
+# .gitignore で `config/*.local.toml` を除外しているので main にはコミットされない。
+#
+# CARD_KEYWORD_MAP / RETURN_KEYWORDS は dict なので **同名キーは local が
+# defaults を上書き**、新キーは追加。SHOP_CARD_MAP も同じ規則 (ショップ単位の
+# 上書き / 追加) で、tuple のフィールドはまるごと差し替え。
+
+# 例: 個人で持っているクレジットカードを追加
+[CARD_KEYWORD_MAP]
+# "ジヤツクス" = "JACCS"
+
+# 例: 既存ショップの突合パラメータを調整 (4noha は楽天で送料が高い行が多い)
+# [SHOP_CARD_MAP."楽天市場"]
+# card_banks = ["VPASS"]
+# keywords = []
+# day_tol = 30
+# amount_tol = 0.05      # 1% → 5% に緩める
+
+# 例: 新ショップを追加
+# [SHOP_CARD_MAP."BOOTH"]
+# card_banks = ["VPASS"]
+# keywords = ["BOOTH", "ピクシブ"]
+# day_tol = 14
+# amount_tol = 0.05
+
+# 返品判定の追加識別子
+[RETURN_KEYWORDS]
+# "BOOTH" = ["BOOTH"]

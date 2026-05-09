@@ -1,0 +1,23 @@
+# レシート内訳名 → 事業者 + 適格請求書番号 マッピング
+#
+# 1 枚のレシートが複数事業者の合算 (= 公共料金の上下水道 等) になるケースで、
+# OCR が抽出した raw_json.items[].name から merchant + invoice_number を
+# 解決するための部分一致テーブル。
+#
+# upload-receipt 時に raw_json.items を receipt_items に展開する際、
+# items[].name と各 alias.keyword を部分一致でマッチさせて事業者を解決する。
+# キーワードは長いものから順にマッチさせる (= 「下水道料金」 が「水道」 より優先)。
+#
+# 個人固有の事業者・T 番号は config/receipt_item_aliases.local.toml に書く。
+# (= .gitignore 対象)
+#
+# 記入例:
+# [[alias]]
+# keyword = "上水道料金"
+# merchant = "○○市水道事業会計"
+# invoice_number = "T0000000000000"
+#
+# [[alias]]
+# keyword = "下水道料金"
+# merchant = "○○市下水道事業会計"
+# invoice_number = "T0000000000000"

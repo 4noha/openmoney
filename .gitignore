@@ -1,0 +1,42 @@
+.env
+*.db
+__pycache__/
+.venv/
+.venv-linux/
+.claude/settings.local.json
+firebase-service-account.json
+.browser_data/
+.cache/
+invoices/
+過去の納税/
+receipts/
+src/scrapers/inspect_*.py
+
+# 開発時の作業ファイル
+PXL_*.jpg
+db.sqlite3
+debug_*.py
+transactions.db-shm
+transactions.db-wal
+*.mhtml
+.claude/
+# 埋め込み Claude Code の設定ファイル (認証情報を含まない settings.json のみ追跡)
+!tools/.claude/
+!tools/.claude/settings.json
+# npm でローカルインストールした Claude Code
+tools/node_modules/
+tools/package.json
+tools/package-lock.json
+開発用マスターパスワード
+plugins/_generated_registry.py
+.backups/
+tests/_local/
+
+# デモ環境 (Cloud Run デプロイ用、個人GCPプロジェクト設定を含むため非公開)
+demo/
+
+# 個人化レイヤ: 個人差分は participant ごとの personal branch でのみ管理 (main では gitignore)
+config/*.local.toml
+# UI から書き換えるユーザタグ設定 (個人差分扱い)
+config/user_tags.toml
+config/user_aoiro.toml

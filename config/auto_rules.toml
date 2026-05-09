@@ -1,0 +1,121 @@
+# OpenMoney 経費自動判断ルール (Step 3)
+#
+# 4 種類のルール型をサポート:
+#   field_match   : bank / debit / credit などの単純フィールド条件で category 設定
+#   keyword_match : keywords.toml の指定リストにヒットしたら category 設定
+#   pattern_match : SQL LIKE パターンにヒットしたら category 設定
+#   propagate     : 隣接行 (直前の同行同日) からカテゴリを継承
+#
+# 共通フィールド (各ルールで指定可能):
+#   id                   ルール識別子 (ログ・デバッグ用)
+#   description          人間向けコメント
+#   when                 inline table、bank / debit / debit_gt / credit / credit_gt
+#                        を組み合わせて WHERE 句を生成
+#   where_unset_only     true (default) なら未分類行のみが対象
+#   set_category         この値を category にセットする (propagate 以外で必須)
+#
+# 個人差分は config/auto_rules.local.toml に書く (defaults と concat)
+# 詳細: docs/personal_layer_plan.md
+
+
+# ─────────────────────────────────────────────
+# 1. Amazon ポイント全額決済 → 個人支出
+# ─────────────────────────────────────────────
+[[field_match]]
+id = "amazon_points_full"
+description = "Amazon の debit=0 (ポイント全額決済) 行を個人支出に分類"
+when = { bank = "Amazon", debit = 0 }
+where_unset_only = true
+set_category = "個人支出"
+
+
+# ─────────────────────────────────────────────
+# 2. MUFG 口座振替・振込 → 出金
+# ─────────────────────────────────────────────
+[[keyword_match]]
+id = "outgoing_mufg_keywords"
+description = "MUFG の OUTGOING キーワードヒット → 出金 (振替・振込・振り込み 等)"
+when = { bank = "MUFG", debit_gt = 0 }
+keyword_list = "OUTGOING"
+field = "description_normalized"
+where_unset_only = true
+set_category = "出金"
+
+
+# ─────────────────────────────────────────────
+# 3. VPASS Suica チャージ → 出金
+# ─────────────────────────────────────────────
+[[pattern_match]]
+id = "vpass_suica"
+description = "VPASS の Suica チャージは現金の代わり扱い (= 経費ではなく出金)"
+when = { bank = "VPASS" }
+field = "description_normalized"
+pattern = "%Suica%"
+where_unset_only = true
+set_category = "出金"
+
+
+# ─────────────────────────────────────────────
+# 4. 手数料行は直前の同行同日カテゴリを継承
+# ─────────────────────────────────────────────
+[[propagate]]
+id = "fee_inherit_prev"
+description = "ATM/振込手数料/為替手数料は直前の同行同日カテゴリを継承"
+field = "description_normalized"
+target_patterns = [
+    "%フリコミ%テスウリヨウ%",
+    "手数料",
+    "%振込手数料%",
+    "%為替手数料%",
+]
+inherit_from = "prev_same_bank_same_date"
+where_unset_only = true
+
+
+# ─────────────────────────────────────────────
+# 5. 収入系 (credit > 0)
+# ─────────────────────────────────────────────
+[[keyword_match]]
+id = "income_salary"
+description = "credit > 0 + SALARY キーワード → 給与"
+when = { credit_gt = 0 }
+keyword_list = "SALARY"
+field = "description_normalized"
+where_unset_only = true
+set_category = "給与"
+
+[[keyword_match]]
+id = "income_sales"
+description = "credit > 0 + SALES_INCOME キーワード → 売上 (Google AdSense / FANBOX 等)"
+when = { credit_gt = 0 }
+keyword_list = "SALES_INCOME"
+field = "description_normalized"
+where_unset_only = true
+set_category = "売上"
+
+[[keyword_match]]
+id = "income_rent"
+description = "credit > 0 + RENT_INCOME キーワード → 家賃収入 (賃貸物件・保証会社経由 等)"
+when = { credit_gt = 0 }
+keyword_list = "RENT_INCOME"
+field = "description_normalized"
+where_unset_only = true
+set_category = "家賃収入"
+
+[[keyword_match]]
+id = "income_insurance"
+description = "credit > 0 + INSURANCE_INCOME キーワード → 保険金"
+when = { credit_gt = 0 }
+keyword_list = "INSURANCE_INCOME"
+field = "description_normalized"
+where_unset_only = true
+set_category = "保険金"
+
+[[keyword_match]]
+id = "vpass_refund"
+description = "VPASS credit + Amazon キーワード (= 返金/charge back) → 返金"
+when = { bank = "VPASS", credit_gt = 0 }
+keyword_list = "VPASS_REFUND"
+field = "description_normalized"
+where_unset_only = true
+set_category = "返金"

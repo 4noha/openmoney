@@ -1,0 +1,10 @@
+[Desktop Entry]
+Name=OpenMoney
+Comment=家計・経費管理ツール
+Exec=uv run python __REPO_ROOT__/desktop.py
+Icon=accessories-calculator
+Path=__REPO_ROOT__
+Terminal=false
+Type=Application
+Categories=Finance;
+StartupWMClass=OpenMoney

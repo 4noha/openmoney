@@ -1,0 +1,19 @@
+# 個人差分のインボイスマスター — このファイルを `invoice_master.local.toml` に
+# コピーして編集する。.gitignore で *.local.toml は main から除外。
+# 個人 branch で追跡しておけば main rebase でも残る。
+#
+# main の invoice_master.toml と同じ形式 ([[vendors]] 配列)。
+# 起動時に invoice_vendors テーブルに **INSERT OR IGNORE** で取り込む
+# (既存の service_name は上書きしない、新規のみ追加)。
+#
+# 例 — 4noha が頻繁に使う特定店舗:
+
+# [[vendors]]
+# service_name = "ジョイフル本田 荒川沖店"
+# company_name = "株式会社ジョイフル本田"
+# invoice_number = "T6050001009303"
+#
+# [[vendors]]
+# service_name = "apollostation (株)REXオート ひたち野うしく店"
+# company_name = "株式会社REXオート"
+# invoice_number = "T5010601045925"
