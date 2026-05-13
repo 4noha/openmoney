@@ -33,6 +33,7 @@ _TEMPLATES = Path(__file__).parent / "templates"
 # 認証不要のパス（解錠前でもアクセス可）
 _PUBLIC_PATHS = {
     "/login",
+    "/api/ping",
     "/api/security/status",
     "/api/security/unlock",
     "/api/security/lock",
