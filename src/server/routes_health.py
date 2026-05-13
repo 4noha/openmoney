@@ -6,6 +6,12 @@ from datetime import datetime, timedelta
 from src.server import app, _tx_db
 
 
+@app.get("/api/ping")
+async def api_ping():
+    """起動確認用の軽量エンドポイント。DB アクセスなし。"""
+    return {"ok": True}
+
+
 @app.get("/api/health")
 async def api_health():
     """各種データ整合性チェックの結果を返す。
