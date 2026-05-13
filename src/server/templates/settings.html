@@ -153,6 +153,18 @@ nav a { font-size: 12px; color: #1976d2; text-decoration: none; margin-right: 16
   </p>
 </div>
 
+<div class="card" id="sec-repair">
+  <h2>再ペアリング</h2>
+  <p class="hint">
+    Android アプリで発行した 8 桁コードを入力してください。<br>
+    トークンが失効した場合や端末を変更した場合に使用します。
+  </p>
+  <input id="repair-code" type="text" maxlength="8" placeholder="XXXXXXXX"
+    style="font-size:15px;letter-spacing:3px;width:140px;text-transform:uppercase;padding:6px 10px;border:1px solid #ccc;border-radius:4px;font-family:monospace">
+  <button id="repair-btn" onclick="doRepair()">ペアリング実行</button>
+  <div id="repair-status" style="margin-top:8px;font-size:12px"></div>
+</div>
+
 <div class="card" id="sec-services">
   <h2>サービス (プラグイン)</h2>
   <p class="hint">
@@ -887,13 +899,25 @@ async function refreshAppUsers() {
     return;
   }
   if (!r.ok) {
-    let msg = `HTTP ${r.status}`;
-    try { msg = (await r.json()).detail || msg; } catch {}
-    area.innerHTML = `<p style="color:#c62828;font-size:12px">取得失敗: ${escapeHtmlAU(JSON.stringify(msg))}</p>`;
+    let detail = '';
+    try { detail = (await r.json()).detail || ''; } catch {}
+    if (r.status === 401 || detail === 'token_expired') {
+      area.innerHTML = `
+        <div style="color:#c62828;font-size:13px;line-height:1.6">
+          ⚠️ PC トークンが失効しています。<br>
+          下の <strong>再ペアリング</strong> フォームから Android アプリのコードを入力してください。
+          <br><a href="#repair-code" onclick="document.getElementById('repair-code').focus()" style="font-size:12px">→ 再ペアリングフォームへ</a>
+        </div>`;
+    } else {
+      area.innerHTML = `<p style="color:#c62828;font-size:12px">取得失敗: ${escapeHtmlAU(JSON.stringify(detail || `HTTP ${r.status}`))}</p>`;
+    }
     return;
   }
   const j = await r.json();
   const parts = [];
+
+  // 自 PC の pc_token_id (= サーバが OPENMONEY_PC_TOKEN の SHA-256 を返す)
+  const selfPcTokenId = j.self_pc_token_id || null;
 
   const androids = j.android_devices || [];
   if (androids.length) {
@@ -925,19 +949,22 @@ async function refreshAppUsers() {
       if (p.tailscale_url) {
         urlLines.push(`<div style="font-size:11px;font-family:monospace">🔗 <a href="${escapeHtmlAU(p.tailscale_url)}" target="_blank" rel="noopener" style="color:#1976d2">${escapeHtmlAU(p.tailscale_url)}</a></div>`);
       }
+      const isSelf = p.pc_token_id === selfPcTokenId;
       parts.push(`
         <div class="row">
           <div class="key" style="flex:1;min-width:0">
             ${escapeHtmlAU(p.device_label || '(ラベルなし)')}
+            ${isSelf ? '<span style="font-size:10px;background:#e3f2fd;color:#1565c0;border-radius:3px;padding:1px 5px;margin-left:4px">この PC</span>' : ''}
             <span style="color:#888;font-size:11px">&nbsp;${escapeHtmlAU(p.pc_token_masked || '')}</span>
             ${urlLines.length ? `<div style="margin-top:4px">${urlLines.join('')}</div>` : ''}
           </div>
           <div style="font-size:11px;color:#888">last: ${escapeHtmlAU((p.last_active_at || '-').slice(0, 19))}</div>
+          <button onclick="revokePcEndpoint('${escapeHtmlAU(p.pc_token_id)}', '${escapeHtmlAU((p.device_label || '(ラベルなし)').replace(/'/g, '&#39;'))}', ${isSelf}, this)">解除</button>
         </div>
       `);
     }
     parts.push(`<p style="font-size:11px;color:#888;margin-top:6px">
-      PC endpoint の解除は Android アプリ or 各 PC で <code>./goodbye.sh</code> を実行してください。
+      自 PC (「この PC」) を解除すると再ペアリングが必要になります。<br>完全削除 (ローカルファイルも削除) は <code>./goodbye.sh</code> を使ってください。
     </p>`);
   }
 
@@ -945,6 +972,30 @@ async function refreshAppUsers() {
     parts.push('<p style="color:#888;font-size:12px">登録端末なし</p>');
   }
   area.innerHTML = parts.join('');
+}
+
+async function revokePcEndpoint(pcTokenId, deviceLabel, isSelf, btnEl) {
+  const msg = isSelf
+    ? `この PC 「${deviceLabel}」 を解除しますか?\nバックエンド側のトークンが無効になります。\n再利用するには再ペアリングが必要です。`
+    : `PC 「${deviceLabel}」 を解除しますか?\n以後この PC からの接続が無効になります。`;
+  if (!confirm(msg)) return;
+  if (btnEl) { btnEl.disabled = true; btnEl.textContent = '解除中…'; }
+  let r;
+  try {
+    r = await fetch(`/api/users/pc/${encodeURIComponent(pcTokenId)}`, { method: 'DELETE' });
+  } catch (e) {
+    alert(`解除失敗: ${e.message}`);
+    if (btnEl) { btnEl.disabled = false; btnEl.textContent = '解除'; }
+    return;
+  }
+  if (!r.ok) {
+    let detail = `HTTP ${r.status}`;
+    try { detail = JSON.stringify((await r.json()).detail); } catch {}
+    alert(`解除失敗: ${detail}`);
+    if (btnEl) { btnEl.disabled = false; btnEl.textContent = '解除'; }
+    return;
+  }
+  refreshAppUsers();
 }
 
 async function revokeAndroidUser(fcmTokenId, deviceName, btnEl) {
@@ -975,6 +1026,35 @@ function escapeHtmlAU(s) {
 
 document.getElementById('app-users-refresh').addEventListener('click', refreshAppUsers);
 refreshAppUsers();
+
+async function doRepair() {
+  const input = document.getElementById('repair-code');
+  const status = document.getElementById('repair-status');
+  const btn = document.getElementById('repair-btn');
+  const code = input.value.trim().toUpperCase();
+  if (code.length < 6) { status.innerHTML = '<span style="color:#c62828">コードを入力してください</span>'; return; }
+  btn.disabled = true;
+  status.innerHTML = '<span style="color:#888">送信中…</span>';
+  try {
+    const r = await fetch('/api/users/repair', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({code}),
+    });
+    const j = await r.json();
+    if (r.ok) {
+      status.innerHTML = `<span style="color:#2e7d32">✓ ペアリング完了 (uid: ${escapeHtmlAU(j.uid)}, token: ${escapeHtmlAU(j.pc_token_prefix)}…)</span>`;
+      input.value = '';
+      refreshAppUsers();
+    } else {
+      status.innerHTML = `<span style="color:#c62828">✗ 失敗: ${escapeHtmlAU(j.detail || JSON.stringify(j))}</span>`;
+    }
+  } catch (e) {
+    status.innerHTML = `<span style="color:#c62828">✗ ${escapeHtmlAU(e.message)}</span>`;
+  } finally {
+    btn.disabled = false;
+  }
+}
 </script>
 </div><!-- /.page-body -->
 </body>

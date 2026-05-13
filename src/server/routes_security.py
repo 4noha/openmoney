@@ -34,6 +34,7 @@ _TEMPLATES = Path(__file__).parent / "templates"
 _PUBLIC_PATHS = {
     "/login",
     "/api/ping",
+    "/api/users/repair",
     "/api/security/status",
     "/api/security/unlock",
     "/api/security/lock",
