@@ -249,7 +249,7 @@ fi
 # ─────────────────────────────────────────────────────────────
 # ── 8. daemon 起動 (= 既起動ならスキップ) ────────────────────
 # ─────────────────────────────────────────────────────────────
-daemon_up() { curl -sf "http://localhost:${DAEMON_PORT}/health" &>/dev/null; }
+daemon_up() { curl -sf "http://localhost:${DAEMON_PORT}/api/health" &>/dev/null; }
 
 if daemon_up; then
   echo "✓ daemon は既に起動中 (port ${DAEMON_PORT})"
