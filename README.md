@@ -95,13 +95,32 @@ plugins/my_bank/
 - [Claude Code](https://claude.ai/code)（`brew install claude-code` または公式サイトからインストール）
 - Android スマートフォン（2FA 承認・レシート撮影用）
 
-### 手順
+### 新しい PC への一発インストール
+
+ターミナルを開いて以下を貼るだけで完結します（curl は Mac に標準で入っています）:
 
 ```bash
-# 1. クローン
-git clone https://github.com/4noha/openmoney.git && cd openmoney
+/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/4noha/openmoney/main/install.sh)"
+```
 
-# 2. 起動 (= 初回も日常も同じコマンド)
+自動でインストールされるもの:
+- **Homebrew** (未インストール時)
+- **git** (未インストール時)
+- リポジトリを `~/openmoney` に clone
+- **uv** / **Node.js** / **Claude Code** のセットアップ
+- daemon 起動・ペアリング
+
+SSH で clone したい場合:
+
+```bash
+REPO_URL=git@github.com:4noha/openmoney.git \
+  /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/4noha/openmoney/main/install.sh)"
+```
+
+### 既存環境での起動
+
+```bash
+# 初回も日常も同じコマンド
 bash start.sh
 ```
 
