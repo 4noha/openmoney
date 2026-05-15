@@ -90,12 +90,12 @@ plugins/my_bank/
 
 ### 必要なもの
 
-- macOS / Linux（Windows は動作確認中）
-- Python 3.11+（[uv](https://docs.astral.sh/uv/) 推奨）
-- [Claude Code](https://claude.ai/code)（`brew install claude-code` または公式サイトからインストール）
+- macOS / Linux / Windows
 - Android スマートフォン（2FA 承認・レシート撮影用）
 
 ### 新しい PC への一発インストール
+
+#### macOS / Linux
 
 ターミナルを開いて以下を貼るだけで完結します（curl は Mac に標準で入っています）:
 
@@ -115,6 +115,28 @@ SSH で clone したい場合:
 ```bash
 REPO_URL=git@github.com:4noha/openmoney.git \
   /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/4noha/openmoney/main/install.sh)"
+```
+
+#### Windows
+
+**PowerShell** を開いて以下を貼るだけで完結します（WSL / Cygwin は不要・純 PowerShell）:
+
+```powershell
+powershell -ExecutionPolicy Bypass -NoProfile -Command "irm https://raw.githubusercontent.com/4noha/openmoney/main/install.ps1 | iex"
+```
+
+> 実行ポリシーが既に `RemoteSigned` / `Bypass` なら `irm https://raw.githubusercontent.com/4noha/openmoney/main/install.ps1 | iex` だけでも可。上の形はポリシーが既定（Restricted）の PC でもそのまま動きます。
+
+自動でインストールされるもの:
+- **winget** で **Git** と **PowerShell 7** — Claude Code に必要
+- リポジトリを `%USERPROFILE%\openmoney` に clone
+- **uv** / **Node.js** / **Claude Code** のセットアップ
+- daemon 起動・ペアリング
+
+SSH で clone したい場合（事前に GitHub の SSH 鍵を設定）:
+
+```powershell
+$env:REPO_URL='git@github.com:4noha/openmoney.git'; irm https://raw.githubusercontent.com/4noha/openmoney/main/install.ps1 | iex
 ```
 
 ### 既存環境での起動

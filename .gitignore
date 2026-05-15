@@ -27,6 +27,11 @@ transactions.db-wal
 tools/node_modules/
 tools/package.json
 tools/package-lock.json
+
+# daemon ランタイム生成物 (start.sh / start.ps1)
+.daemon.log
+.daemon.err.log
+.daemon.pid
 開発用マスターパスワード
 plugins/_generated_registry.py
 .backups/
