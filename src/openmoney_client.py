@@ -84,6 +84,12 @@ def _patch_self_info(payload: dict) -> tuple[int, str]:
 _last_reported: Optional[str] = None
 
 
+def reset_last_reported() -> None:
+    """次回 register_*_self() 呼び出し時に強制再申告させる（再ペアリング後に使用）。"""
+    global _last_reported
+    _last_reported = None
+
+
 def register_tailscale_self() -> Optional[str]:
     """Tailscale URL を検出 → backend に申告 (= 変化があれば PATCH)。
 

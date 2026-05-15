@@ -24,6 +24,7 @@ from __future__ import annotations
 import base64
 import os
 import re
+import tempfile
 import threading
 from pathlib import Path
 
@@ -84,6 +85,25 @@ def is_encrypted(value: str) -> bool:
 # .env パース・書込
 # ─────────────────────────────────────────────
 
+def _atomic_write(path: Path, content: str) -> None:
+    """同一ディレクトリで tempfile を作成してアトミックに置き換える。"""
+    fd, tmp = tempfile.mkstemp(dir=path.parent, prefix=".tmp_env_")
+    try:
+        os.write(fd, content.encode())
+        os.close(fd)
+        os.replace(tmp, path)
+    except Exception:
+        try:
+            os.close(fd)
+        except OSError:
+            pass
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
+        raise
+
+
 def parse_env(path: Path = ENV_PATH) -> list[dict]:
     """.env を読み、key/value/encrypted を返す。コメント行・空行は除外。"""
     result: list[dict] = []
@@ -98,7 +118,9 @@ def parse_env(path: Path = ENV_PATH) -> list[dict]:
             continue
         key, _, val = stripped.partition("=")
         key = key.strip()
-        val = val.strip().strip('"').strip("'")
+        val = val.strip()
+        if len(val) >= 2 and val[0] == val[-1] and val[0] in ('"', "'"):
+            val = val[1:-1]
         if not key:
             continue
         result.append({"key": key, "value": val, "encrypted": is_encrypted(val)})
@@ -115,25 +137,26 @@ def env_keys_status(path: Path = ENV_PATH) -> list[dict]:
 
 def write_env_value(key: str, new_value: str, path: Path = ENV_PATH) -> bool:
     """指定キーの値を新しい値に書き換える。既存無ければ末尾に追記。
-    コメント・他行は保持する。書き換え成功で True。
+    コメント・他行は保持する。書き換え成功で True。排他制御 + アトミック書き込み。
     """
-    lines = path.read_text().splitlines() if path.exists() else []
-    out = []
-    found = False
-    for line in lines:
-        stripped = line.strip()
-        if stripped.startswith("#") or "=" not in stripped:
-            out.append(line)
-            continue
-        cur_key, _, _ = stripped.partition("=")
-        if cur_key.strip() == key:
+    with _lock:
+        lines = path.read_text().splitlines() if path.exists() else []
+        out = []
+        found = False
+        for line in lines:
+            stripped = line.strip()
+            if stripped.startswith("#") or "=" not in stripped:
+                out.append(line)
+                continue
+            cur_key, _, _ = stripped.partition("=")
+            if cur_key.strip() == key:
+                out.append(f"{key}={new_value}")
+                found = True
+            else:
+                out.append(line)
+        if not found:
             out.append(f"{key}={new_value}")
-            found = True
-        else:
-            out.append(line)
-    if not found:
-        out.append(f"{key}={new_value}")
-    path.write_text("\n".join(out) + "\n")
+        _atomic_write(path, "\n".join(out) + "\n")
     return True
 
 
@@ -461,12 +484,21 @@ def change_master_password(old_password: str, new_password: str,
             ) from exc
         decrypted.append((e["key"], plain))
 
-    # 2. new で全部暗号化して書戻し (write_env_value が全行書き換え)
-    n_rewritten = 0
-    for key, plain in decrypted:
-        enc = encrypt_value(plain, new_password)
-        write_env_value(key, enc, path)
-        n_rewritten += 1
+    # 2. new で全部暗号化 → .env をアトミックに一括書き換え (途中クラッシュ防止)
+    new_values: dict[str, str] = {k: encrypt_value(v, new_password) for k, v in decrypted}
+    with _lock:
+        raw_lines = path.read_text().splitlines() if path.exists() else []
+        out = []
+        for line in raw_lines:
+            stripped = line.strip()
+            if stripped.startswith("#") or "=" not in stripped:
+                out.append(line)
+                continue
+            cur_key, _, _ = stripped.partition("=")
+            cur_key = cur_key.strip()
+            out.append(f"{cur_key}={new_values[cur_key]}" if cur_key in new_values else line)
+        _atomic_write(path, "\n".join(out) + "\n")
+    n_rewritten = len(decrypted)
 
     # 3. プロセス内 master を差し替え (os.environ の平文値は変わらず継続動作)
     with _lock:

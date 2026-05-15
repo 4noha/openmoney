@@ -441,9 +441,8 @@ function tagDeleteCustom(i) {
 }
 
 async function tagSave() {
-  // ジャンルタグ: チェック外れている = disabled
-  const disabled = [...document.querySelectorAll('#tags-genre-list input[type=checkbox]')]
-    .filter(cb => !cb.checked).map(cb => cb.dataset.tagId);
+  // ジャンルタグ: _tagState.disabled が正として使用（DOM は表示用）
+  const disabled = (_tagState.disabled || []).slice();
   // カスタムタグ: id 必須、enabled checkbox は別管理 (現状: id を disabled に含める)
   const custom = [...document.querySelectorAll('#tags-custom-list [data-custom-idx]')].map(row => {
     return {
@@ -492,13 +491,13 @@ async function refreshServices() {
     ].filter(Boolean).join('');
     const inputs = s.env_keys.map(k => {
       const statusLabel = {encrypted:'🔒 暗号化済', plaintext:'🔓 平文', missing:'—— 未設定'}[k.status];
-      const helpLine = k.help ? `<div class="hint" style="grid-column:1/-1;margin:-4px 0 6px;color:#666;font-size:11px">${k.help}</div>` : '';
+      const helpLine = k.help ? `<div class="hint" style="grid-column:1/-1;margin:-4px 0 6px;color:#666;font-size:11px">${escapeHtmlAU(k.help)}</div>` : '';
       // bool 型 = ON/OFF チェックボックス。 値は "1" or "" (= missing) で
       // 保存される。 既に "1" 等が保存済みなら status='plaintext'/'encrypted' で
       // checked 表示
       if (k.type === 'bool') {
         const checked = k.status !== 'missing' ? 'checked' : '';
-        return `<label>${k.label}</label>
+        return `<label>${escapeHtmlAU(k.label)}</label>
                 <label style="display:flex;align-items:center;gap:6px;cursor:pointer">
                   <input type="checkbox" name="${k.key}" data-svc="${s.name}" data-bool="1" ${checked}>
                   <span style="font-size:12px;color:#666">${checked ? 'ON' : 'OFF'}</span>
@@ -508,7 +507,7 @@ async function refreshServices() {
       }
       const placeholder = k.status === 'encrypted' ? '••••••••' : (k.placeholder || '');
       const patternAttr = k.pattern ? ` pattern="${k.pattern.replace(/"/g, '&quot;')}" data-pattern-error="${(k.pattern_error||'').replace(/"/g, '&quot;')}" title="${(k.pattern_error || k.pattern).replace(/"/g, '&quot;')}"` : '';
-      return `<label>${k.label}</label>
+      return `<label>${escapeHtmlAU(k.label)}</label>
               <input type="${k.type === 'password' ? 'password' : 'text'}"
                      name="${k.key}" data-svc="${s.name}"
                      placeholder="${placeholder}"${patternAttr}>
@@ -516,18 +515,18 @@ async function refreshServices() {
               ${helpLine}`;
     }).join('');
     const banksLine = s.provided_banks.length
-      ? `<div class="hint" style="margin:0 0 6px">担当 bank: ${s.provided_banks.join(' / ')} — 既存データ ${s.data.row_count}件 (${s.data.oldest||'-'} 〜 ${s.data.latest||'-'})</div>`
+      ? `<div class="hint" style="margin:0 0 6px">担当 bank: ${s.provided_banks.map(b => escapeHtmlAU(b)).join(' / ')} — 既存データ ${s.data.row_count}件 (${s.data.oldest||'-'} 〜 ${s.data.latest||'-'})</div>`
       : '';
     return `<div class="service-card ${s.enabled ? '' : 'disabled'}" data-name="${s.name}">
       <header onclick="toggleExpand(this)">
         <div class="toggle ${s.enabled ? 'on' : ''}"
              onclick="event.stopPropagation();toggleService('${s.name}', ${!s.enabled})"></div>
-        <div class="name">${s.display_name}</div>
+        <div class="name">${escapeHtmlAU(s.display_name)}</div>
         <span class="chevron">▶</span>
       </header>
       <div class="body">
         <div class="badges" style="margin-bottom:6px">${badges}</div>
-        <div class="desc">${s.description || ''}</div>
+        <div class="desc">${escapeHtmlAU(s.description || '')}</div>
         ${banksLine}
         <fieldset>${inputs}</fieldset>
         <button class="primary" onclick="saveService('${s.name}')">保存</button>

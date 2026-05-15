@@ -35,6 +35,14 @@ if [[ -z "${OPENMONEY_PC_TOKEN:-}" ]]; then
   exit 1
 fi
 
+# 暗号化済み .env の場合は平文トークンを取り出せないためエラー
+if [[ "${OPENMONEY_PC_TOKEN}" == *"🔒"* ]]; then
+  echo "✗ OPENMONEY_PC_TOKEN が暗号化済みです。"
+  echo "  daemon を起動してマスターパスワードで解錠してから goodbye.sh を実行してください。"
+  echo "  （解錠せず退役させる場合は Android アプリ / 管理画面からこの PC を手動削除してください）"
+  exit 1
+fi
+
 URL="${OPENMONEY_BACKEND_URL:-http://localhost:8000}"
 
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"

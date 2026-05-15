@@ -11,6 +11,8 @@ from __future__ import annotations
 
 import json
 import os
+import re
+import tempfile
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -165,8 +167,8 @@ async def repair_pairing(body: RepairBody):
     from src.security import get_secret
 
     code = body.code.strip().upper()
-    if len(code) < 6:
-        raise HTTPException(status_code=400, detail="コードが短すぎます")
+    if not re.fullmatch(r'[A-Z0-9]{6,16}', code):
+        raise HTTPException(status_code=400, detail="コードは 6〜16 桁の英数字で入力してください")
 
     try:
         backend_url = (get_secret("OPENMONEY_BACKEND_URL") or "").rstrip("/")
@@ -212,7 +214,6 @@ async def repair_pairing(body: RepairBody):
     skip = {
         "OPENMONEY_BACKEND_URL=", "OPENMONEY_USER_UID=", "OPENMONEY_PC_TOKEN=",
         "OPENMONEY_DEVICE_LABEL=", "OPENMONEY_USER_EMAIL=", "OPENMONEY_AI_TOKEN_ID=",
-        "ANTHROPIC_API_KEY=", "ANTHROPIC_BASE_URL=",
     }
     lines = [l for l in lines if not any(l.startswith(k) for k in skip)]
     if lines and not lines[-1].endswith("\n"):
@@ -226,12 +227,22 @@ async def repair_pairing(body: RepairBody):
     ]
     if ai_token_id:
         lines.append(f"OPENMONEY_AI_TOKEN_ID={ai_token_id}\n")
-    if ai_token:
-        lines += [
-            f"ANTHROPIC_API_KEY={ai_token}\n",
-            f"ANTHROPIC_BASE_URL={effective_backend}\n",
-        ]
-    env_path.write_text("".join(lines))
+    content = "".join(lines)
+    fd, tmp = tempfile.mkstemp(dir=env_path.parent, prefix=".tmp_env_")
+    try:
+        os.write(fd, content.encode())
+        os.close(fd)
+        os.replace(tmp, env_path)
+    except Exception:
+        try:
+            os.close(fd)
+        except OSError:
+            pass
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
+        raise
     os.chmod(env_path, 0o600)
 
     # 実行中プロセスの os.environ も更新（再起動なしで即反映）
@@ -242,11 +253,8 @@ async def repair_pairing(body: RepairBody):
     os.environ["OPENMONEY_USER_EMAIL"] = f"{uid}@openmoney.io"
     if ai_token_id:
         os.environ["OPENMONEY_AI_TOKEN_ID"] = ai_token_id
-    if ai_token:
-        os.environ["ANTHROPIC_API_KEY"] = ai_token
-        os.environ["ANTHROPIC_BASE_URL"] = effective_backend
 
-    # tools/.claude/settings.local.json 更新
+    # tools/.claude/settings.local.json 更新（ANTHROPIC_* は .env に書かず settings.local.json のみ）
     if ai_token:
         from scripts.openmoney_pair import _write_claude_settings
         _write_claude_settings(
@@ -259,7 +267,7 @@ async def repair_pairing(body: RepairBody):
     import threading as _threading
     def _reregister():
         import src.openmoney_client as _oc
-        _oc._last_reported = None  # 強制再申告
+        _oc.reset_last_reported()  # 強制再申告
         for fn in (_oc.register_tailscale_self, _oc.register_lan_self):
             try:
                 fn()
