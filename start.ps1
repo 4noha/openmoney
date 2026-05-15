@@ -334,9 +334,29 @@ if (Test-Path $SettingsLocal) {
 }
 
 # ─────────────────────────────────────────────────────────────
-# ── 11. Claude Code 起動 ─────────────────────────────────────
+# ── 11. アクセス URL を表示 ──────────────────────────────────
 # ─────────────────────────────────────────────────────────────
 Write-Rule "✓ Server (localhost:$DaemonPort) + Claude Code を起動します"
+Write-Host "  ブラウザで開く (localhost):"
+Write-Host "    http://localhost:$DaemonPort/ui        💸 支出分類"
+Write-Host "    http://localhost:$DaemonPort/monthly   📅 月別収支"
+Write-Host "    http://localhost:$DaemonPort/settings  ⚙ 設定"
+
+# Tailscale が動いていれば MagicDNS の URL も表示
+if (Test-Cmd 'tailscale') {
+  try {
+    $tsJson = tailscale status --json 2>$null | ConvertFrom-Json
+    $tsDns  = ($tsJson.Self.DNSName -replace '\.$', '')
+    if ($tsDns) {
+      Write-Host ""
+      Write-Host "  Tailscale (MagicDNS) からも開ける:"
+      Write-Host "    http://${tsDns}:$DaemonPort/ui        💸 支出分類"
+      Write-Host "    http://${tsDns}:$DaemonPort/monthly   📅 月別収支"
+      Write-Host "    http://${tsDns}:$DaemonPort/settings  ⚙ 設定"
+    }
+  } catch {}
+}
+Write-Host ""
 Set-Location $RepoRoot
 & $ClaudeBin --dangerously-skip-permissions
 exit $LASTEXITCODE

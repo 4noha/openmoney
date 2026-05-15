@@ -299,12 +299,36 @@ if ! _password_set; then
 fi
 
 # ─────────────────────────────────────────────────────────────
-# ── 10. Claude Code 起動 ─────────────────────────────────────
+# ── 10. アクセス URL を表示 ──────────────────────────────────
 # ─────────────────────────────────────────────────────────────
 echo ""
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo "✓ Server (localhost:${DAEMON_PORT}) + Claude Code を起動します"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo ""
+echo "  ブラウザで開く (localhost):"
+echo "    http://localhost:${DAEMON_PORT}/ui        💸 支出分類"
+echo "    http://localhost:${DAEMON_PORT}/monthly   📅 月別収支"
+echo "    http://localhost:${DAEMON_PORT}/settings  ⚙ 設定"
+
+# Tailscale が動いていれば MagicDNS の URL も表示
+if command -v tailscale &>/dev/null; then
+  _ts_dns=$(tailscale status --json 2>/dev/null | python3 -c "
+import json,sys
+try:
+  d=json.load(sys.stdin)
+  print(d.get('Self',{}).get('DNSName','').rstrip('.'))
+except Exception:
+  pass
+" 2>/dev/null || true)
+  if [ -n "$_ts_dns" ]; then
+    echo ""
+    echo "  Tailscale (MagicDNS) からも開ける:"
+    echo "    http://${_ts_dns}:${DAEMON_PORT}/ui        💸 支出分類"
+    echo "    http://${_ts_dns}:${DAEMON_PORT}/monthly   📅 月別収支"
+    echo "    http://${_ts_dns}:${DAEMON_PORT}/settings  ⚙ 設定"
+  fi
+fi
 echo ""
 
 cd "$REPO_ROOT"
