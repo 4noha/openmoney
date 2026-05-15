@@ -331,6 +331,22 @@ except Exception:
 fi
 echo ""
 
+# Claude Code のウェルカムメッセージ用に URL 情報をファイルに書き出す
+{
+  echo "サーバーが起動しています。ブラウザでアクセスできます:"
+  echo ""
+  echo "- http://localhost:${DAEMON_PORT}/ui        💸 支出分類"
+  echo "- http://localhost:${DAEMON_PORT}/monthly   📅 月別収支"
+  echo "- http://localhost:${DAEMON_PORT}/settings  ⚙ 設定"
+  if [ -n "${_ts_dns:-}" ]; then
+    echo ""
+    echo "Tailscale (MagicDNS) からも開けます:"
+    echo "- http://${_ts_dns}:${DAEMON_PORT}/ui"
+    echo "- http://${_ts_dns}:${DAEMON_PORT}/monthly"
+    echo "- http://${_ts_dns}:${DAEMON_PORT}/settings"
+  fi
+} > "$TOOLS_DIR/.startup_info"
+
 cd "$REPO_ROOT"
 
 # settings.local.json の env (ANTHROPIC_AUTH_TOKEN / BASE_URL / model) を

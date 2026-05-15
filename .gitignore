@@ -32,6 +32,7 @@ tools/package-lock.json
 .daemon.log
 .daemon.err.log
 .daemon.pid
+tools/.startup_info
 開発用マスターパスワード
 plugins/_generated_registry.py
 .backups/

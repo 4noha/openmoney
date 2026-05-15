@@ -357,6 +357,27 @@ if (Test-Cmd 'tailscale') {
   } catch {}
 }
 Write-Host ""
+
+# Claude Code のウェルカムメッセージ用に URL 情報をファイルに書き出す
+$startupLines = @(
+  'サーバーが起動しています。ブラウザでアクセスできます:',
+  '',
+  "- http://localhost:$DaemonPort/ui        💸 支出分類",
+  "- http://localhost:$DaemonPort/monthly   📅 月別収支",
+  "- http://localhost:$DaemonPort/settings  ⚙ 設定"
+)
+if ($tsDns) {
+  $startupLines += ''
+  $startupLines += 'Tailscale (MagicDNS) からも開けます:'
+  $startupLines += "- http://${tsDns}:$DaemonPort/ui"
+  $startupLines += "- http://${tsDns}:$DaemonPort/monthly"
+  $startupLines += "- http://${tsDns}:$DaemonPort/settings"
+}
+[System.IO.File]::WriteAllLines(
+  (Join-Path $ToolsDir '.startup_info'),
+  [string[]]$startupLines,
+  $Utf8NoBom
+)
 Set-Location $RepoRoot
 & $ClaudeBin --dangerously-skip-permissions
 exit $LASTEXITCODE
