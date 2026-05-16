@@ -83,7 +83,12 @@ def _ocr_with_claude(image_bytes: bytes, mime_type: str = "image/jpeg") -> dict:
     # 受領レシートの OCR 精度は Opus が大幅に高い (Haiku/Sonnet は手書き / かすれ / 縦長
     # レシートで誤認識しがち) ので Opus 固定。 backend proxy 側は plan で model 制限を
     # かけずに budget_jpy のみで制限する方針 (= ai_proxy._precheck 参照)。
-    client = anthropic.Anthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
+    # X-OpenMoney-Task: backend proxy が ai_requests に用途タグを記録するため
+    # (= レシート OCR と Claude Code エージェントのコストを分離集計する)。
+    client = anthropic.Anthropic(
+        api_key=os.environ["ANTHROPIC_API_KEY"],
+        default_headers={"X-OpenMoney-Task": "receipt-ocr"},
+    )
     b64 = base64.standard_b64encode(image_bytes).decode()
     msg = client.messages.create(
         model="claude-opus-4-7",
